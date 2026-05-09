@@ -1,0 +1,204 @@
+{
+  "appName": {
+    "message": "TypeLess"
+  },
+  "appDescription": {
+    "message": "Daha az yaz, daha çok yapıştır. ServiceNow ve tüm web formları için hazır template'ler."
+  },
+  "popupTitle": {
+    "message": "TypeLess — Şablon Yapıştırıcı (Ctrl+Shift+T)"
+  },
+  "tagline": {
+    "message": "Daha az yaz. Daha çok yapıştır."
+  },
+  "madeBy": {
+    "message": "Yapımcı"
+  },
+  "viewOnGithub": {
+    "message": "GitHub'da görüntüle"
+  },
+  "cmdOpenPopup": {
+    "message": "Template menüsünü aç"
+  },
+  "cmdPaste1": {
+    "message": "1. template'i yapıştır"
+  },
+  "cmdPaste2": {
+    "message": "2. template'i yapıştır"
+  },
+  "cmdPaste3": {
+    "message": "3. template'i yapıştır"
+  },
+  "popupHeading": {
+    "message": "Template Seç"
+  },
+  "popupEmpty": {
+    "message": "Henüz template yok. Ayarlardan ekleyin."
+  },
+  "popupEditLink": {
+    "message": "⚙ Template'leri Düzenle"
+  },
+  "popupShortcutHint": {
+    "message": "Ctrl+Shift+1..3"
+  },
+  "popupNoAccess": {
+    "message": "Sayfaya erişilemedi. Sayfayı yenileyip tekrar deneyin."
+  },
+  "formHeading": {
+    "message": "Template bilgilerini doldurun"
+  },
+  "formPaste": {
+    "message": "Yapıştır"
+  },
+  "formCancel": {
+    "message": "İptal"
+  },
+  "needFocus": {
+    "message": "Lütfen önce yapıştırmak istediğiniz alana tıklayın."
+  },
+  "optionsTitle": {
+    "message": "Ticket Template Paster — Ayarlar"
+  },
+  "hintsTitle": {
+    "message": "İpuçları:"
+  },
+  "hintPlaceholder": {
+    "message": "Template içinde {{değişken_adı}} yazarsanız, yapıştırırken form açılır ve doldurmanızı ister."
+  },
+  "hintShortcut": {
+    "message": "İlk 3 template için otomatik olarak Ctrl+Shift+1..3 kısayolu atanır. (Chrome maksimum 4 kısayol destekliyor; biri popup menü için kullanıldığından 3 template slot kalıyor. Diğer template'leri popup menüden veya slash komutuyla çalıştırabilirsin.)"
+  },
+  "hintSlash": {
+    "message": "Shortcut alanına yazdığınız kelimeyi ticket ekranında /kelime şeklinde yazıp boşluk bırakırsanız otomatik genişler."
+  },
+  "btnAdd": {
+    "message": "+ Yeni Template Ekle"
+  },
+  "btnExportAll": {
+    "message": "Tümünü Dışa Aktar (JSON)"
+  },
+  "btnExportOne": {
+    "message": "Dışa Aktar"
+  },
+  "btnExportSelected": {
+    "message": "Seçilenleri Dışa Aktar"
+  },
+  "btnImport": {
+    "message": "İçe Aktar (JSON)"
+  },
+  "btnSelectAll": {
+    "message": "Tümünü Seç"
+  },
+  "btnDeselectAll": {
+    "message": "Seçimi Kaldır"
+  },
+  "selectedCount": {
+    "message": "$COUNT$ seçili",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "exportSingleTooltip": {
+    "message": "Sadece bu template'i dışa aktar"
+  },
+  "importMerge": {
+    "message": "Mevcutlara ekle"
+  },
+  "importReplace": {
+    "message": "Mevcut tüm template'leri değiştir"
+  },
+  "importChooseFile": {
+    "message": "JSON dosyası seç"
+  },
+  "importPreview": {
+    "message": "Dosyada $COUNT$ template bulundu",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "importCancel": {
+    "message": "İptal"
+  },
+  "importSuccess": {
+    "message": "$COUNT$ template başarıyla içe aktarıldı ✓",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "statusSaved": {
+    "message": "Kaydedildi ✓"
+  },
+  "labelName": {
+    "message": "Template Adı"
+  },
+  "labelShortcut": {
+    "message": "Slash Komutu (isteğe bağlı) — örn: \"sifre\" → /sifre"
+  },
+  "labelBody": {
+    "message": "İçerik — değişkenler için {{değişken_adı}} kullanın"
+  },
+  "btnUp": {
+    "message": "↑ Yukarı"
+  },
+  "btnDown": {
+    "message": "↓ Aşağı"
+  },
+  "btnDelete": {
+    "message": "Sil"
+  },
+  "confirmDelete": {
+    "message": "Bu template'i silmek istediğinize emin misiniz?"
+  },
+  "indexLabel": {
+    "message": "$INDEX$. template",
+    "placeholders": {
+      "index": { "content": "$1", "example": "1" }
+    }
+  },
+  "shortcutLabel": {
+    "message": " — Klavye kısayolu: Ctrl+Shift+$NUM$",
+    "placeholders": {
+      "num": { "content": "$1", "example": "1" }
+    }
+  },
+  "importConfirm": {
+    "message": "$COUNT$ template içe aktarılacak. Mevcut template'lerin üzerine yazılsın mı?\n\n\"Tamam\": Üzerine yaz\n\"İptal\": Mevcutlara ekle",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "importError": {
+    "message": "İçe aktarma hatası: $MSG$",
+    "placeholders": {
+      "msg": { "content": "$1" }
+    }
+  },
+  "importInvalid": {
+    "message": "Geçersiz format"
+  },
+  "defaultTpl1Name": {
+    "message": "Şifre Sıfırlama"
+  },
+  "defaultTpl1Body": {
+    "message": "Merhaba {{musteri_adi}},\n\nŞifreniz başarıyla sıfırlanmıştır. Geçici şifrenizle giriş yaptıktan sonra kendi şifrenizi belirleyebilirsiniz.\n\nTicket No: {{ticket_no}}\n\nİyi çalışmalar."
+  },
+  "defaultTpl2Name": {
+    "message": "Bilgi İsteği"
+  },
+  "defaultTpl2Body": {
+    "message": "Merhaba {{musteri_adi}},\n\nTalebinizle ilgili daha fazla bilgiye ihtiyacımız var. Lütfen aşağıdaki bilgileri iletir misiniz?\n\n- {{bilgi_1}}\n- {{bilgi_2}}\n\nTeşekkürler."
+  },
+  "defaultTpl3Name": {
+    "message": "Ticket Kapanış"
+  },
+  "defaultTpl3Body": {
+    "message": "Merhaba {{musteri_adi}},\n\nTalebiniz çözüme kavuşturulmuştur. Eğer başka bir sorunuz olursa yeni ticket açabilirsiniz.\n\nİyi günler dileriz."
+  },
+  "statusError": {
+  "message": "Kayıt başarısız"
+},
+  "popupSystemPage": {
+    "message": "TypeLess bu sayfada çalışamaz (tarayıcı sistem sayfası).\n\nNormal bir web sayfasında deneyin (ör. google.com).",
+    "description": "Shown in popup when user clicks paste on a chrome:// or about: page"
+  }
+}

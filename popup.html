@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    :root {
+      --tl-primary: #4f46e5;
+      --tl-primary-hover: #4338ca;
+      --tl-bg: #fafafa;
+      --tl-border: #e5e7eb;
+      --tl-text: #111827;
+      --tl-muted: #6b7280;
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 12px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      color: var(--tl-text);
+    }
+    .header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .header h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+    .tagline {
+      font-size: 11px;
+      color: var(--tl-muted);
+      font-style: italic;
+    }
+    .template-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .template-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--tl-bg);
+      border: 1px solid var(--tl-border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .template-item:hover {
+      background: #eef2ff;
+      border-color: var(--tl-primary);
+    }
+    .template-item:focus-visible {
+      outline: 2px solid var(--tl-primary);
+      outline-offset: 1px;
+    }
+    .template-name {
+      font-weight: 500;
+    }
+    .template-shortcut {
+      font-size: 11px;
+      color: var(--tl-muted);
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      background: #fff;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--tl-border);
+    }
+    .empty {
+      color: var(--tl-muted);
+      text-align: center;
+      padding: 20px;
+    }
+    .footer {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+    .footer a {
+      color: var(--tl-primary);
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .footer a:hover { text-decoration: underline; }
+    .credits {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f3f4f6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+      color: #9ca3af;
+    }
+    .credits a {
+      color: #9ca3af;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .credits a:hover { color: var(--tl-primary); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h3 id="heading"></h3>
+    <span class="tagline" id="tagline"></span>
+  </div>
+  <div id="list" class="template-list" role="list"></div>
+  <div class="footer">
+    <a id="options-link"></a>
+    <span id="shortcut-hint" style="color:#9ca3af"></span>
+  </div>
+  <div class="credits">
+    <a href="https://kaktusdev.net" target="_blank" rel="noopener">kaktusdev.net</a>
+    <span>·</span>
+    <a href="https://github.com/yfthcn" target="_blank" rel="noopener" title="GitHub">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      GitHub
+    </a>
+  </div>
+  <script src="common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

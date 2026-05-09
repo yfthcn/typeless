@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title id="page-title">TypeLess</title>
+  <style>
+    :root {
+      --tl-primary: #4f46e5;
+      --tl-primary-hover: #4338ca;
+      --tl-primary-soft: #eef2ff;
+      --tl-bg: #fafafa;
+      --tl-border: #e5e7eb;
+      --tl-text: #111827;
+      --tl-muted: #6b7280;
+      --tl-success: #059669;
+      --tl-danger: #dc2626;
+      --tl-warn-bg: #fffbeb;
+      --tl-warn-border: #fcd34d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      max-width: 860px;
+      margin: 30px auto;
+      padding: 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: var(--tl-text);
+      line-height: 1.5;
+    }
+    h1 {
+      font-size: 24px;
+      margin: 0 0 4px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    h1 img { width: 32px; height: 32px; }
+    .subtitle {
+      color: var(--tl-muted);
+      font-size: 14px;
+      font-style: italic;
+      margin-bottom: 24px;
+    }
+    .template {
+      border: 1px solid var(--tl-border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+      background: var(--tl-bg);
+      transition: border-color .15s;
+    }
+    .template.selected {
+      background: var(--tl-primary-soft);
+      border-color: var(--tl-primary);
+    }
+    .template-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .template-header input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      cursor: pointer;
+    }
+    .template-name-inline {
+      font-weight: 600;
+      font-size: 14px;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .index-label {
+      font-size: 11px;
+      color: #9ca3af;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .row > div { flex: 1; }
+    label {
+      display: block;
+      font-size: 12px;
+      color: #4b5563;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--tl-primary);
+      box-shadow: 0 0 0 3px rgba(79,70,229,.15);
+    }
+    textarea {
+      min-height: 100px;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 13px;
+    }
+    button {
+      padding: 8px 14px;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      transition: all .15s;
+    }
+    button:hover:not(:disabled) {
+      background: #f9fafb;
+      border-color: #9ca3af;
+    }
+    button:focus-visible {
+      outline: 2px solid var(--tl-primary);
+      outline-offset: 2px;
+    }
+    button.primary {
+      background: var(--tl-primary);
+      color: white;
+      border-color: var(--tl-primary);
+    }
+    button.primary:hover:not(:disabled) {
+      background: var(--tl-primary-hover);
+    }
+    button.danger {
+      color: var(--tl-danger);
+      border-color: #fecaca;
+    }
+    button.danger:hover:not(:disabled) {
+      background: #fef2f2;
+    }
+    button.small {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .actions { display: flex; gap: 8px; margin-top: 10px; }
+    .top-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .selection-bar {
+      background: var(--tl-primary-soft);
+      border: 1px solid var(--tl-primary);
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .selection-bar.visible { display: flex; }
+    .hint {
+      background: var(--tl-warn-bg);
+      border: 1px solid var(--tl-warn-border);
+      padding: 12px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .hint ul { margin: 6px 0 0 18px; padding: 0; }
+    .hint li { margin-bottom: 4px; }
+    .hint code {
+      background: rgba(0,0,0,.05);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+    }
+    .status {
+      margin-left: 10px;
+      color: var(--tl-success);
+      font-size: 13px;
+      font-weight: 500;
+      transition: opacity .3s;
+    }
+    .lang-switch {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--tl-muted);
+    }
+    .lang-switch select {
+      font-size: 12px;
+      padding: 4px 8px;
+      width: auto;
+    }
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-backdrop.visible { display: flex; }
+    .modal {
+      background: white;
+      padding: 24px;
+      border-radius: 8px;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 20px 50px rgba(0,0,0,.2);
+    }
+    .modal h3 { margin: 0 0 12px; }
+    .modal-preview {
+      background: #f3f4f6;
+      padding: 10px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #4b5563;
+      margin: 10px 0;
+    }
+    .radio-group label {
+      display: block;
+      padding: 10px 12px;
+      border: 1px solid var(--tl-border);
+      border-radius: 4px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      font-weight: normal;
+      font-size: 14px;
+      color: var(--tl-text);
+    }
+    .radio-group label:has(input:checked) {
+      background: var(--tl-primary-soft);
+      border-color: var(--tl-primary);
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+    footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--tl-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--tl-muted);
+    }
+    footer a {
+      color: var(--tl-primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    footer a.gh {
+      color: #4b5563;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <h1>
+    <img src="icons/icon48.png" alt="" />
+    <span id="title"></span>
+  </h1>
+  <div class="subtitle" id="subtitle"></div>
+
+  <div class="hint">
+    <strong id="hints-title"></strong>
+    <ul>
+      <li id="hint-placeholder"></li>
+      <li id="hint-shortcut"></li>
+      <li id="hint-slash"></li>
+    </ul>
+  </div>
+
+  <div class="top-actions">
+    <button class="primary" id="add"></button>
+    <button id="export-all"></button>
+    <button id="import-btn"></button>
+    <input type="file" id="import-file" accept=".json,application/json" hidden />
+    <span id="status" class="status"></span>
+    <span class="lang-switch">
+      <label for="lang-select" style="display:inline;font-weight:normal">Language / Dil:</label>
+      <select id="lang-select">
+        <option value="auto">Auto</option>
+        <option value="en">English</option>
+        <option value="tr">Türkçe</option>
+      </select>
+    </span>
+  </div>
+
+  <div class="selection-bar" id="selection-bar">
+    <span id="selection-count"></span>
+    <button class="small primary" id="export-selected"></button>
+    <button class="small" id="deselect-all"></button>
+  </div>
+
+  <div id="templates"></div>
+
+  <footer>
+    <div>
+      <span id="footer-made-by"></span>
+      <a href="https://kaktusdev.net" target="_blank" rel="noopener">kaktusdev.net</a>
+    </div>
+    <div>
+      <a class="gh" href="https://github.com/yfthcn" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        <span id="footer-github"></span>
+      </a>
+    </div>
+  </footer>
+
+  <!-- Import Modal -->
+  <div class="modal-backdrop" id="import-modal">
+    <div class="modal" role="dialog" aria-labelledby="import-modal-title">
+      <h3 id="import-modal-title"></h3>
+      <div class="modal-preview" id="import-preview"></div>
+      <div class="radio-group">
+        <label>
+          <input type="radio" name="import-mode" value="merge" checked />
+          <span id="import-merge-label"></span>
+        </label>
+        <label>
+          <input type="radio" name="import-mode" value="replace" />
+          <span id="import-replace-label"></span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button id="import-cancel"></button>
+        <button class="primary" id="import-confirm"></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

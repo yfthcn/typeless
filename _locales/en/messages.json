@@ -1,0 +1,207 @@
+{
+  "appName": {
+    "message": "TypeLess",
+    "description": "Extension name"
+  },
+  "appDescription": {
+    "message": "Type less. Paste more. Ready-made templates for ServiceNow and any web form.",
+    "description": "Extension description"
+  },
+  "popupTitle": {
+    "message": "TypeLess — Template Paster (Ctrl+Shift+T)",
+    "description": "Tooltip shown on extension icon"
+  },
+  "tagline": {
+    "message": "Type less. Paste more."
+  },
+  "madeBy": {
+    "message": "Made by"
+  },
+  "viewOnGithub": {
+    "message": "View on GitHub"
+  },
+  "cmdOpenPopup": {
+    "message": "Open template menu"
+  },
+  "cmdPaste1": {
+    "message": "Paste 1st template"
+  },
+  "cmdPaste2": {
+    "message": "Paste 2nd template"
+  },
+  "cmdPaste3": {
+    "message": "Paste 3rd template"
+  },
+  "popupHeading": {
+    "message": "Select a Template"
+  },
+  "popupEmpty": {
+    "message": "No templates yet. Add some from settings."
+  },
+  "popupEditLink": {
+    "message": "⚙ Edit Templates"
+  },
+  "popupShortcutHint": {
+    "message": "Ctrl+Shift+1..3"
+  },
+  "popupNoAccess": {
+    "message": "Cannot access this page. Refresh and try again."
+  },
+  "formHeading": {
+    "message": "Fill in template fields"
+  },
+  "formPaste": {
+    "message": "Paste"
+  },
+  "formCancel": {
+    "message": "Cancel"
+  },
+  "needFocus": {
+    "message": "Please click the field you want to paste into first."
+  },
+  "optionsTitle": {
+    "message": "Ticket Template Paster — Settings"
+  },
+  "hintsTitle": {
+    "message": "Tips:"
+  },
+  "hintPlaceholder": {
+    "message": "Use {{variable_name}} in templates — a form will open to fill them when pasting."
+  },
+  "hintShortcut": {
+    "message": "The first 3 templates get Ctrl+Shift+1..3 shortcuts automatically. (Chrome allows max 4 shortcuts; one is used by the popup, leaving 3 for templates. Use popup menu or slash commands for the rest.)"
+  },
+  "hintSlash": {
+    "message": "Type /shortcut + space in any ticket field to auto-expand the template."
+  },
+  "btnAdd": {
+    "message": "+ Add New Template"
+  },
+  "btnExportAll": {
+    "message": "Export All (JSON)"
+  },
+  "btnExportOne": {
+    "message": "Export"
+  },
+  "btnExportSelected": {
+    "message": "Export Selected"
+  },
+  "btnImport": {
+    "message": "Import (JSON)"
+  },
+  "btnSelectAll": {
+    "message": "Select All"
+  },
+  "btnDeselectAll": {
+    "message": "Deselect All"
+  },
+  "selectedCount": {
+    "message": "$COUNT$ selected",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "exportSingleTooltip": {
+    "message": "Export this template only"
+  },
+  "importMerge": {
+    "message": "Append to existing templates"
+  },
+  "importReplace": {
+    "message": "Replace all existing templates"
+  },
+  "importChooseFile": {
+    "message": "Choose JSON file"
+  },
+  "importPreview": {
+    "message": "$COUNT$ template(s) found in file",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "importCancel": {
+    "message": "Cancel"
+  },
+  "importSuccess": {
+    "message": "$COUNT$ template(s) imported successfully ✓",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "statusSaved": {
+    "message": "Saved ✓"
+  },
+  "labelName": {
+    "message": "Template Name"
+  },
+  "labelShortcut": {
+    "message": "Slash Command (optional) — e.g., \"pass\" → /pass"
+  },
+  "labelBody": {
+    "message": "Content — use {{variable_name}} for variables"
+  },
+  "btnUp": {
+    "message": "↑ Move Up"
+  },
+  "btnDown": {
+    "message": "↓ Move Down"
+  },
+  "btnDelete": {
+    "message": "Delete"
+  },
+  "confirmDelete": {
+    "message": "Are you sure you want to delete this template?"
+  },
+  "indexLabel": {
+    "message": "Template #$INDEX$",
+    "placeholders": {
+      "index": { "content": "$1", "example": "1" }
+    }
+  },
+  "shortcutLabel": {
+    "message": " — Keyboard shortcut: Ctrl+Shift+$NUM$",
+    "placeholders": {
+      "num": { "content": "$1", "example": "1" }
+    }
+  },
+  "importConfirm": {
+    "message": "$COUNT$ templates will be imported. Overwrite existing ones?\n\nOK: Overwrite\nCancel: Append to existing",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "importError": {
+    "message": "Import error: $MSG$",
+    "placeholders": {
+      "msg": { "content": "$1" }
+    }
+  },
+  "importInvalid": {
+    "message": "Invalid format"
+  },
+  "defaultTpl1Name": {
+    "message": "Password Reset"
+  },
+  "defaultTpl1Body": {
+    "message": "Hi {{customer_name}},\n\nYour password has been reset. You can log in with the temporary password and set your own afterwards.\n\nTicket No: {{ticket_no}}\n\nBest regards."
+  },
+  "defaultTpl2Name": {
+    "message": "Information Request"
+  },
+  "defaultTpl2Body": {
+    "message": "Hi {{customer_name}},\n\nWe need additional information regarding your request. Could you please share the following?\n\n- {{info_1}}\n- {{info_2}}\n\nThanks."
+  },
+  "defaultTpl3Name": {
+    "message": "Ticket Closure"
+  },
+  "defaultTpl3Body": {
+    "message": "Hi {{customer_name}},\n\nYour request has been resolved. Please open a new ticket if you have any further questions.\n\nHave a nice day."
+  },
+  "statusError": {
+  "message": "Save failed"
+},
+  "popupSystemPage": {
+    "message": "TypeLess can't run on this page (browser system page).\n\nTry it on a normal web page (e.g. google.com).",
+    "description": "Shown in popup when user clicks paste on a chrome:// or about: page"
+  }
+}

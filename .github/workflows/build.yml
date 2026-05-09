@@ -1,0 +1,64 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify build.py syntax
+        run: python -c "import ast; ast.parse(open('build.py').read())"
+
+      - name: Validate JSON files
+        run: |
+          python -m json.tool manifest.json > /dev/null
+          python -m json.tool _locales/en/messages.json > /dev/null
+          python -m json.tool _locales/tr/messages.json > /dev/null
+
+      - name: Validate locale parity
+        run: |
+          python <<'EOF'
+          import json
+          en = set(json.load(open('_locales/en/messages.json')).keys())
+          tr = set(json.load(open('_locales/tr/messages.json')).keys())
+          if en != tr:
+              missing_in_tr = en - tr
+              missing_in_en = tr - en
+              print(f"Locale parity mismatch!")
+              print(f"  Missing in tr: {missing_in_tr}")
+              print(f"  Missing in en: {missing_in_en}")
+              exit(1)
+          print(f"Locale parity OK ({len(en)} keys)")
+          EOF
+
+      - name: Build packages
+        run: python build.py
+
+      - name: List output
+        run: ls -lh dist/
+
+      - name: Upload Chrome build
+        uses: actions/upload-artifact@v4
+        with:
+          name: typeless-chrome
+          path: dist/typeless-chrome.zip
+          retention-days: 30
+
+      - name: Upload Firefox build
+        uses: actions/upload-artifact@v4
+        with:
+          name: typeless-firefox
+          path: dist/typeless-firefox.zip
+          retention-days: 30
