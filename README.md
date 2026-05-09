@@ -168,7 +168,15 @@ PRs welcome. Please keep changes focused — one feature per PR. The codebase is
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE).
+TypeLess is free and open-source software, licensed under the
+[GNU General Public License v3.0](LICENSE).
+
+Copyright (C) 2026 yfthcn (kaktusdev.net)
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
 
 ---
 
