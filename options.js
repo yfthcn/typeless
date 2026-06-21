@@ -129,7 +129,9 @@
     card.className = "template" + (selectedIds.has(tpl.id) ? " selected" : "");
     card.dataset.idx = String(i);
     card.dataset.id = tpl.id;
-    card.draggable = true;
+    // NOTE: the card itself is NOT draggable — a draggable container blocks
+    // mouse text-selection/caret placement inside the rich-text editor. Only
+    // the drag handle is draggable (standard drag-handle pattern).
 
     const header = document.createElement("div");
     header.className = "template-header";
@@ -138,6 +140,7 @@
     handle.className = "drag-handle";
     handle.textContent = "⠿";
     handle.title = TL.t("dragHint");
+    handle.draggable = true;
     header.appendChild(handle);
 
     const checkbox = document.createElement("input");
@@ -594,11 +597,16 @@
   // --- Drag-drop reorder (plan step 17) ---
   let dragId = null;
   refs.templates.addEventListener("dragstart", (e) => {
-    const card = /** @type {any} */ (e.target).closest(".template");
+    // Drag is only initiated from the handle (the only draggable element).
+    const el = /** @type {any} */ (e.target);
+    if (!el.classList || !el.classList.contains("drag-handle")) { e.preventDefault(); return; }
+    const card = el.closest(".template");
     if (!card) return;
     dragId = card.dataset.id;
     card.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
+    // Use the whole card as the drag image instead of the tiny handle.
+    try { e.dataTransfer.setDragImage(card, 12, 12); } catch (_) {}
   });
   refs.templates.addEventListener("dragover", (e) => {
     e.preventDefault();
