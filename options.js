@@ -13,9 +13,14 @@
   let pendingConflicts = [];         // incoming shortcuts that collide (lowercased)
   let pendingSource = null;          // "textblaze" | "magical" | null
   let userLang = "auto";
-  let suppressNextStorageEvent = false;
+  let lastWriteSig = "";             // fingerprint of our last write (echo detection)
   let lastFocusedBody = null;        // for variable insertion
   let searchTerm = "";
+
+  // Cheap fingerprint of a template list — only OUR own storage echo matches it,
+  // so a concurrent write from another context (other tab/backup/migration) is
+  // applied instead of being swallowed.
+  const sig = (list) => (Array.isArray(list) ? list : []).map((t) => t.id + ":" + (t.body || "").length).join("|");
 
   userLang = await TL.getLang();
   await TL.loadLocale(userLang);
@@ -90,12 +95,11 @@
 
   // --- Persistence ---
   const save = TL.debounce(async () => {
-    suppressNextStorageEvent = true;
     try {
       await TL.setTemplates(templates);
+      lastWriteSig = sig(templates);
       showStatus(TL.t("statusSaved"));
     } catch (err) {
-      suppressNextStorageEvent = false;
       console.error("[TypeLess] Save failed:", err);
       showStatus(TL.t("statusError"));
     }
@@ -104,6 +108,7 @@
   async function saveNow() {
     await TL.setTemplates(templates);
     templates = await TL.getTemplates(); // re-read to pick up stamped ids/order
+    lastWriteSig = sig(templates);
     showStatus(TL.t("statusSaved"));
   }
 
@@ -232,6 +237,20 @@
     return btn;
   }
 
+  // Sanitize + clamp the rich editor's content into the in-memory body and
+  // refresh the char-count. Re-sanitizing a clamped slice repairs a mid-tag cut
+  // so the in-memory body (used for exports) is always well-formed. Used by the
+  // editor input, the toolbar commands and the insert-variable menu.
+  function storeRichBody(i, editor) {
+    let b = TL.sanitizeHtml(editor.innerHTML);
+    if (b.length > TL.LIMITS.MAX_BODY) b = TL.sanitizeHtml(b.slice(0, TL.LIMITS.MAX_BODY));
+    templates[i].body = b;
+    const card = editor.closest(".template");
+    const count = card && card.querySelector(".char-count");
+    if (count) count.textContent = b.length + " / " + TL.LIMITS.MAX_BODY;
+    save();
+  }
+
   // ============================================================
   // Body section: plain/rich toggle, rich-text editor, field-builder
   // ============================================================
@@ -287,11 +306,7 @@
       // Body is stored sanitized; route through the sanitizer again on render.
       editor.innerHTML = TL.sanitizeHtml(tpl.body || "");
       editor.addEventListener("focus", () => { lastFocusedBody = editor; });
-      editor.addEventListener("input", () => {
-        templates[i].body = TL.sanitizeHtml(editor.innerHTML).slice(0, TL.LIMITS.MAX_BODY);
-        count.textContent = templates[i].body.length + " / " + TL.LIMITS.MAX_BODY;
-        save();
-      });
+      editor.addEventListener("input", () => storeRichBody(i, editor));
       // Paste into the editor: sanitize clipboard HTML before it lands.
       editor.addEventListener("paste", (e) => {
         e.preventDefault();
@@ -363,7 +378,7 @@
         }
         // Persist after the command mutates the focused editor.
         const editor = bar.parentElement.querySelector('[data-rich-editor]');
-        if (editor) { templates[i].body = TL.sanitizeHtml(editor.innerHTML); save(); }
+        if (editor) storeRichBody(i, editor);
       });
       bar.appendChild(btn);
     }
@@ -484,7 +499,9 @@
   // Replace the {{name...}} token in the body with a freshly-built token.
   function rewriteFieldToken(i, name, newToken) {
     const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp("\\{\\{\\s*" + esc + "(\\|[^{}]*)?\\}\\}");
+    // Global: a field can appear more than once in the body; keep every
+    // occurrence in sync (parseFields dedups to one row but the token may repeat).
+    const re = new RegExp("\\{\\{\\s*" + esc + "(\\|[^{}]*)?\\}\\}", "g");
     templates[i].body = (templates[i].body || "").replace(re, newToken);
     syncBodyControl(i);
     save();
@@ -689,11 +706,11 @@
     return new Date().toISOString().slice(0, 10);
   }
 
-  // --- Search ---
-  refs.search.addEventListener("input", () => {
+  // --- Search (debounced: full-text filter + full re-render per keystroke) ---
+  refs.search.addEventListener("input", TL.debounce(() => {
     searchTerm = refs.search.value.trim();
     render();
-  });
+  }, 150));
 
   // --- Variable insert menu ---
   const VARS = [
@@ -728,8 +745,7 @@
     if (ta.dataset.richEditor) {
       ta.focus();
       document.execCommand("insertText", false, token);
-      if (templates[idx]) templates[idx].body = TL.sanitizeHtml(ta.innerHTML);
-      save();
+      if (templates[idx]) storeRichBody(idx, ta);
       return;
     }
     const start = ta.selectionStart ?? ta.value.length;
@@ -886,7 +902,9 @@
         if (conflictMode === "skip") continue;
         if (conflictMode === "overwrite") {
           const i = byShortcut.get(key);
-          result[i] = { ...result[i], name: inc.name, body: inc.body, tags: inc.tags, fields: inc.fields };
+          const next = { ...result[i], name: inc.name, body: inc.body, tags: inc.tags, fields: inc.fields };
+          if (inc.format === "html") next.format = "html"; else delete next.format;
+          result[i] = next;
           continue;
         }
       }
@@ -911,17 +929,12 @@
 
   // --- React to external storage changes ---
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== "local") return;
-    if (changes.templates) {
-      if (suppressNextStorageEvent) {
-        suppressNextStorageEvent = false;
-      } else {
-        const next = /** @type {any[]} */ (changes.templates.newValue || []);
-        templates = next.slice().sort((a, b) => a.order - b.order);
-        render();
-        updateSelectionBar();
-      }
-    }
+    if (area !== "local" || !changes.templates) return;
+    const next = /** @type {any[]} */ (changes.templates.newValue || []);
+    if (sig(next) === lastWriteSig) return; // our own debounced-save echo — ignore
+    templates = next.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    render();
+    updateSelectionBar();
   });
 
   // --- Initial load ---

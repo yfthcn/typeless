@@ -78,8 +78,8 @@
     }
   });
 
-  // --- Search ---
-  searchEl.addEventListener("input", () => renderList(searchEl.value));
+  // --- Search (debounced) ---
+  searchEl.addEventListener("input", TL.debounce(() => renderList(searchEl.value), 120));
   searchEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       const first = /** @type {any} */ (listEl.querySelector(".template-item"));

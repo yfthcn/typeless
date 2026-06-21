@@ -59,7 +59,7 @@
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === "local" && changes.templates) {
         const next = /** @type {any[]} */ (changes.templates.newValue || []);
-        templateCache = next.slice().sort((a, b) => a.order - b.order);
+        templateCache = next.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       }
     });
   }
@@ -237,13 +237,26 @@
     }
   `;
 
+  // Parse the theme CSS ONCE into a constructable stylesheet shared by every
+  // shadow host (modern; avoids re-parsing the CSS string per modal/toast/
+  // dropdown). Falls back to a <style> element on engines without it.
+  let themeSheet = null;
+  try {
+    themeSheet = new CSSStyleSheet();
+    themeSheet.replaceSync(THEME_CSS);
+  } catch (_) { themeSheet = null; }
+
   function makeShadowHost(positionCss) {
     const host = document.createElement("div");
     host.style.cssText = positionCss;
     const shadow = host.attachShadow({ mode: "closed" });
-    const style = document.createElement("style");
-    style.textContent = THEME_CSS;
-    shadow.appendChild(style);
+    if (themeSheet) {
+      shadow.adoptedStyleSheets = [themeSheet];
+    } else {
+      const style = document.createElement("style");
+      style.textContent = THEME_CSS;
+      shadow.appendChild(style);
+    }
     return { host, shadow };
   }
 
@@ -403,7 +416,7 @@
     }
     if (el.isContentEditable) {
       el.focus();
-      const hasCursor = safeHtml.indexOf(CURSOR) >= 0;
+      const hasCursor = safeHtml.includes(CURSOR);
       let ok = false;
       try { ok = document.execCommand("insertHTML", false, safeHtml); } catch (_) {}
       if (!ok) {

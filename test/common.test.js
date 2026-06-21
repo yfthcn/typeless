@@ -195,6 +195,14 @@ test("sanitizeHtml removes dangerous elements with their subtree", () => {
   assert.equal(TL.sanitizeHtml("<object data=x></object>ok"), "ok");
 });
 
+test("sanitizeHtml: void kill-tags drop only themselves, keep trailing content", () => {
+  // Regression: <base>/<meta>/<link>/<frame> are void; they must not swallow
+  // everything after them in the DOM-free fallback.
+  assert.equal(TL.sanitizeHtml("text<base href=x>more"), "textmore");
+  assert.equal(TL.sanitizeHtml("a<meta charset=utf-8>b<link rel=x>c"), "abc");
+  assert.equal(TL.sanitizeHtml("<b>x</b><base>after"), "<b>x</b>after");
+});
+
 test("sanitizeHtml drops all attributes including event handlers", () => {
   assert.equal(TL.sanitizeHtml('<b onclick="x" style="color:red" class="y" id="z">t</b>'), "<b>t</b>");
   assert.equal(TL.sanitizeHtml('<img src=x onerror=alert(1)>hi'), "hi");

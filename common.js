@@ -143,6 +143,10 @@
     ["script", "style", "iframe", "object", "embed", "link", "meta", "base",
      "form", "svg", "math", "template", "noscript", "title", "head", "frame", "frameset"]
   ));
+  // Void / never-closed kill-tags: drop the tag but do NOT enter "skip subtree"
+  // state — they have no subtree, and otherwise everything after a
+  // <base>/<meta>/<link>/<frame> would be swallowed in the DOM-free fallback.
+  const VOID_KILL = new Set(["link", "meta", "base", "frame"]);
   const SAFE_PROTOCOLS = ["http:", "https:", "mailto:", "tel:"];
 
   /** Decode the handful of entities we care about (for the DOM-free fallback). */
@@ -219,7 +223,12 @@
       if (m[2] === undefined) continue; // comment
       const closing = m[1] === "/";
       const tag = m[2].toLowerCase();
-      if (TL.KILL_TAGS.has(tag)) { if (!closing) kill++; else if (kill) kill--; continue; }
+      if (TL.KILL_TAGS.has(tag)) {
+        const selfClose = /\/\s*$/.test(m[3] || "");
+        if (closing) { if (kill) kill--; }
+        else if (!VOID_KILL.has(tag) && !selfClose) kill++;
+        continue;
+      }
       if (kill) continue;
       if (!TL.ALLOWED_TAGS.has(tag)) continue; // unwrap
       if (tag === "br") { if (!closing) out.push("<br>"); continue; }
