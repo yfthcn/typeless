@@ -269,6 +269,73 @@
       gap: 6px;
     }
     footer a:hover { text-decoration: underline; }
+    /* Search */
+    .search-box {
+      flex: 1; min-width: 160px;
+      padding: 8px 10px; border: 1px solid var(--tl-border);
+      border-radius: 6px; font-size: 13px; font-family: inherit;
+    }
+    /* Tags */
+    .tags-wrap { margin-bottom: 10px; }
+    .tag-input { font-size: 13px; }
+    .card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .tag-chip {
+      background: var(--tl-primary-soft); color: var(--tl-primary);
+      font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500;
+    }
+    /* Drag handle */
+    .drag-handle { cursor: grab; color: #9ca3af; font-size: 16px; user-select: none; padding: 0 2px; }
+    .template.dragging { opacity: .5; }
+    .template.drag-over { border-color: var(--tl-primary); border-style: dashed; }
+    /* Variable menu */
+    .var-menu { position: relative; }
+    .var-list {
+      position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px;
+      background: #fff; border: 1px solid var(--tl-border); border-radius: 6px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.15); min-width: 220px; display: none;
+    }
+    .var-list.open { display: block; }
+    .var-list button {
+      display: block; width: 100%; text-align: left; border: none; background: none;
+      padding: 8px 12px; font-size: 13px; border-radius: 0;
+    }
+    .var-list button:hover { background: var(--tl-primary-soft); }
+    .var-list code { font-family: ui-monospace, monospace; color: var(--tl-primary); }
+    /* Backups panel */
+    .panel {
+      border: 1px solid var(--tl-border); border-radius: 8px;
+      padding: 14px 16px; margin-bottom: 16px; background: var(--tl-bg); display: none;
+    }
+    .panel.visible { display: block; }
+    .panel h3 { margin: 0 0 10px; font-size: 14px; }
+    .backup-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 0; border-bottom: 1px solid var(--tl-border); font-size: 13px;
+    }
+    .backup-item:last-child { border-bottom: none; }
+    .backup-meta { color: var(--tl-muted); }
+    /* Conflict group */
+    .conflict-note {
+      background: var(--tl-warn-bg); border: 1px solid var(--tl-warn-border);
+      padding: 10px 12px; border-radius: 6px; font-size: 13px; margin: 10px 0; display: none;
+    }
+    .conflict-note.visible { display: block; }
+    .source-note { font-size: 12px; color: var(--tl-muted); margin-top: 6px; }
+    /* Dark mode (plan step 13) */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --tl-primary-soft: #312e81; --tl-bg: #1f2937; --tl-border: #374151;
+        --tl-text: #f3f4f6; --tl-muted: #9ca3af; --tl-warn-bg: #3a2e12; --tl-warn-border: #854d0e;
+      }
+      body { background: #111827; }
+      input, textarea, select { background: #111827; color: var(--tl-text); border-color: #374151; }
+      button { background: #1f2937; color: var(--tl-text); border-color: #374151; }
+      button:hover:not(:disabled) { background: #374151; }
+      .modal, .var-list { background: #1f2937; }
+      .modal-preview { background: #111827; color: #d1d5db; }
+      label { color: #d1d5db; }
+      .hint code, input, .template { color: var(--tl-text); }
+    }
   </style>
 </head>
 <body>
@@ -290,9 +357,19 @@
   <div class="top-actions">
     <button class="primary" id="add"></button>
     <button id="export-all"></button>
+    <button id="export-clip"></button>
     <button id="import-btn"></button>
+    <button id="backups-btn"></button>
     <input type="file" id="import-file" accept=".json,application/json" hidden />
     <span id="status" class="status"></span>
+  </div>
+
+  <div class="top-actions">
+    <input type="search" id="search" class="search-box" autocomplete="off" />
+    <span class="var-menu">
+      <button id="var-btn" type="button"></button>
+      <div class="var-list" id="var-list"></div>
+    </span>
     <span class="lang-switch">
       <label for="lang-select" style="display:inline;font-weight:normal">Language / Dil:</label>
       <select id="lang-select">
@@ -301,6 +378,11 @@
         <option value="tr">Türkçe</option>
       </select>
     </span>
+  </div>
+
+  <div class="panel" id="backups-panel">
+    <h3 id="backups-title"></h3>
+    <div id="backups-list"></div>
   </div>
 
   <div class="selection-bar" id="selection-bar">
@@ -331,6 +413,7 @@
     <div class="modal" role="dialog" aria-labelledby="import-modal-title">
       <h3 id="import-modal-title"></h3>
       <div class="modal-preview" id="import-preview"></div>
+      <div class="source-note" id="import-source"></div>
       <div class="radio-group">
         <label>
           <input type="radio" name="import-mode" value="merge" checked />
@@ -340,6 +423,14 @@
           <input type="radio" name="import-mode" value="replace" />
           <span id="import-replace-label"></span>
         </label>
+      </div>
+      <div class="conflict-note" id="conflict-note">
+        <div id="conflict-text" style="margin-bottom:8px;"></div>
+        <div class="radio-group">
+          <label><input type="radio" name="conflict-mode" value="keepboth" checked /> <span id="conflict-keepboth"></span></label>
+          <label><input type="radio" name="conflict-mode" value="overwrite" /> <span id="conflict-overwrite"></span></label>
+          <label><input type="radio" name="conflict-mode" value="skip" /> <span id="conflict-skip"></span></label>
+        </div>
       </div>
       <div class="modal-actions">
         <button id="import-cancel"></button>

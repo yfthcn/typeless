@@ -1,3 +1,4 @@
+// @ts-check
 // ==============================
 // TypeLess — Options page
 // ==============================
@@ -7,45 +8,38 @@
 
   // --- State ---
   let templates = [];
-  let selectedIndices = new Set();
-  let pendingImport = null;
+  let selectedIds = new Set();      // id-based (survives reorder/delete) — plan step 17
+  let pendingImport = null;          // validated templates awaiting confirm
+  let pendingConflicts = [];         // incoming shortcuts that collide (lowercased)
+  let pendingSource = null;          // "textblaze" | "magical" | null
   let userLang = "auto";
   let suppressNextStorageEvent = false;
+  let lastFocusedBody = null;        // for variable insertion
+  let searchTerm = "";
 
-  // --- i18n load ---
   userLang = await TL.getLang();
   await TL.loadLocale(userLang);
 
-  // --- DOM refs (cached) ---
-  const $ = (id) => document.getElementById(id);
+  const $ = (id) => /** @type {any} */ (document.getElementById(id));
   const refs = {
-    pageTitle: $("page-title"),
-    title: $("title"),
-    subtitle: $("subtitle"),
-    hintsTitle: $("hints-title"),
-    hintPlaceholder: $("hint-placeholder"),
-    hintShortcut: $("hint-shortcut"),
-    hintSlash: $("hint-slash"),
-    btnAdd: $("add"),
-    btnExportAll: $("export-all"),
-    btnImport: $("import-btn"),
-    importFile: $("import-file"),
-    status: $("status"),
-    langSelect: $("lang-select"),
-    selectionBar: $("selection-bar"),
-    selectionCount: $("selection-count"),
-    btnExportSelected: $("export-selected"),
-    btnDeselectAll: $("deselect-all"),
+    pageTitle: $("page-title"), title: $("title"), subtitle: $("subtitle"),
+    hintsTitle: $("hints-title"), hintPlaceholder: $("hint-placeholder"),
+    hintShortcut: $("hint-shortcut"), hintSlash: $("hint-slash"),
+    btnAdd: $("add"), btnExportAll: $("export-all"), btnExportClip: $("export-clip"),
+    btnImport: $("import-btn"), btnBackups: $("backups-btn"), importFile: $("import-file"),
+    status: $("status"), langSelect: $("lang-select"),
+    search: $("search"), varBtn: $("var-btn"), varList: $("var-list"),
+    backupsPanel: $("backups-panel"), backupsTitle: $("backups-title"), backupsList: $("backups-list"),
+    selectionBar: $("selection-bar"), selectionCount: $("selection-count"),
+    btnExportSelected: $("export-selected"), btnDeselectAll: $("deselect-all"),
     templates: $("templates"),
-    importModal: $("import-modal"),
-    importModalTitle: $("import-modal-title"),
-    importPreview: $("import-preview"),
-    importMergeLabel: $("import-merge-label"),
-    importReplaceLabel: $("import-replace-label"),
-    importCancel: $("import-cancel"),
-    importConfirm: $("import-confirm"),
-    footerMadeBy: $("footer-made-by"),
-    footerGithub: $("footer-github")
+    importModal: $("import-modal"), importModalTitle: $("import-modal-title"),
+    importPreview: $("import-preview"), importSource: $("import-source"),
+    importMergeLabel: $("import-merge-label"), importReplaceLabel: $("import-replace-label"),
+    importCancel: $("import-cancel"), importConfirm: $("import-confirm"),
+    conflictNote: $("conflict-note"), conflictText: $("conflict-text"),
+    conflictKeepboth: $("conflict-keepboth"), conflictOverwrite: $("conflict-overwrite"), conflictSkip: $("conflict-skip"),
+    footerMadeBy: $("footer-made-by"), footerGithub: $("footer-github"),
   };
 
   // --- Apply translations to static UI ---
@@ -60,7 +54,9 @@
     refs.hintSlash.textContent = TL.t("hintSlash");
     refs.btnAdd.textContent = TL.t("btnAdd");
     refs.btnExportAll.textContent = TL.t("btnExportAll");
+    refs.btnExportClip.textContent = TL.t("btnExportClip");
     refs.btnImport.textContent = TL.t("btnImport");
+    refs.btnBackups.textContent = TL.t("btnBackups");
     refs.btnExportSelected.textContent = TL.t("btnExportSelected");
     refs.btnDeselectAll.textContent = TL.t("btnDeselectAll");
     refs.importModalTitle.textContent = TL.t("btnImport");
@@ -68,12 +64,19 @@
     refs.importReplaceLabel.textContent = TL.t("importReplace");
     refs.importCancel.textContent = TL.t("importCancel");
     refs.importConfirm.textContent = TL.t("btnImport");
+    refs.conflictKeepboth.textContent = TL.t("conflictKeepboth");
+    refs.conflictOverwrite.textContent = TL.t("conflictOverwrite");
+    refs.conflictSkip.textContent = TL.t("conflictSkip");
+    refs.backupsTitle.textContent = TL.t("backupsTitle");
     refs.langSelect.value = userLang;
+    refs.search.placeholder = TL.t("searchPlaceholder");
+    refs.varBtn.textContent = TL.t("varInsert");
     refs.footerMadeBy.textContent = TL.t("madeBy") + " ";
     refs.footerGithub.textContent = TL.t("viewOnGithub");
+    buildVarMenu();
   }
 
-  // --- Status indicator (debounced feedback) ---
+  // --- Status indicator ---
   let statusTimer = null;
   function showStatus(msg) {
     refs.status.textContent = msg;
@@ -85,7 +88,7 @@
     }, 2000);
   }
 
-  // --- Persistence (debounced to batch rapid edits) ---
+  // --- Persistence ---
   const save = TL.debounce(async () => {
     suppressNextStorageEvent = true;
     try {
@@ -100,12 +103,13 @@
 
   async function saveNow() {
     await TL.setTemplates(templates);
+    templates = await TL.getTemplates(); // re-read to pick up stamped ids/order
     showStatus(TL.t("statusSaved"));
   }
 
-  // --- Selection bar update ---
+  // --- Selection bar ---
   function updateSelectionBar() {
-    const count = selectedIndices.size;
+    const count = selectedIds.size;
     if (count > 0) {
       refs.selectionBar.classList.add("visible");
       refs.selectionCount.textContent = TL.t("selectedCount", [String(count)]);
@@ -114,21 +118,33 @@
     }
   }
 
-  // --- Helper: build a single template card using DOM API (CSP-safe) ---
+  // --- Visible templates (search filter) ---
+  function visibleTemplates() {
+    return searchTerm ? TL.searchTemplates(searchTerm, templates) : templates;
+  }
+
+  // --- Build one card (DOM API, CSP-safe) ---
   function buildTemplateCard(tpl, i, total) {
     const card = document.createElement("div");
-    card.className = "template" + (selectedIndices.has(i) ? " selected" : "");
+    card.className = "template" + (selectedIds.has(tpl.id) ? " selected" : "");
     card.dataset.idx = String(i);
+    card.dataset.id = tpl.id;
+    card.draggable = true;
 
-    // Header: checkbox + name + index/shortcut label + export button
     const header = document.createElement("div");
     header.className = "template-header";
 
+    const handle = document.createElement("span");
+    handle.className = "drag-handle";
+    handle.textContent = "⠿";
+    handle.title = TL.t("dragHint");
+    header.appendChild(handle);
+
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.dataset.select = String(i);
-    checkbox.checked = selectedIndices.has(i);
-    checkbox.setAttribute("aria-label", `Select template ${i + 1}`);
+    checkbox.dataset.select = tpl.id;
+    checkbox.checked = selectedIds.has(tpl.id);
+    checkbox.setAttribute("aria-label", `Select ${tpl.name || i + 1}`);
     header.appendChild(checkbox);
 
     const nameSpan = document.createElement("span");
@@ -150,154 +166,153 @@
     exportBtn.title = TL.t("exportSingleTooltip");
     exportBtn.textContent = TL.t("btnExportOne");
     header.appendChild(exportBtn);
-
     card.appendChild(header);
 
-    // Row 1: Name + Shortcut
+    // Name + Shortcut row
     const row = document.createElement("div");
     row.className = "row";
-
-    const nameWrap = document.createElement("div");
-    const nameLabel = document.createElement("label");
-    nameLabel.textContent = TL.t("labelName");
-    const nameInput = document.createElement("input");
-    nameInput.dataset.field = "name";
-    nameInput.dataset.idx = String(i);
-    nameInput.value = tpl.name || "";
-    nameInput.maxLength = 200;
-    nameWrap.appendChild(nameLabel);
-    nameWrap.appendChild(nameInput);
-    row.appendChild(nameWrap);
-
-    const shortcutWrap = document.createElement("div");
-    const shortcutLabel = document.createElement("label");
-    shortcutLabel.textContent = TL.t("labelShortcut");
-    const shortcutInput = document.createElement("input");
-    shortcutInput.dataset.field = "shortcut";
-    shortcutInput.dataset.idx = String(i);
-    shortcutInput.value = tpl.shortcut || "";
-    shortcutInput.maxLength = 50;
-    shortcutWrap.appendChild(shortcutLabel);
-    shortcutWrap.appendChild(shortcutInput);
-    row.appendChild(shortcutWrap);
-
+    row.appendChild(labeledInput(TL.t("labelName"), "name", i, tpl.name || "", 200));
+    row.appendChild(labeledInput(TL.t("labelShortcut"), "shortcut", i, tpl.shortcut || "", 50));
     card.appendChild(row);
 
-    // Body textarea
+    // Tags
+    const tagsWrap = document.createElement("div");
+    tagsWrap.className = "tags-wrap";
+    const tagsLabel = document.createElement("label");
+    tagsLabel.textContent = TL.t("labelTags");
+    const tagsInput = document.createElement("input");
+    tagsInput.className = "tag-input";
+    tagsInput.dataset.field = "tags";
+    tagsInput.dataset.idx = String(i);
+    tagsInput.placeholder = TL.t("tagsPlaceholder");
+    tagsInput.value = (tpl.tags || []).join(", ");
+    tagsWrap.appendChild(tagsLabel);
+    tagsWrap.appendChild(tagsInput);
+    card.appendChild(tagsWrap);
+
+    // Body
     const bodyWrap = document.createElement("div");
     const bodyLabel = document.createElement("label");
     bodyLabel.textContent = TL.t("labelBody");
     const bodyArea = document.createElement("textarea");
     bodyArea.dataset.field = "body";
     bodyArea.dataset.idx = String(i);
+    bodyArea.maxLength = TL.LIMITS.MAX_BODY;
     bodyArea.value = tpl.body || "";
+    bodyArea.addEventListener("focus", () => { lastFocusedBody = bodyArea; });
     bodyWrap.appendChild(bodyLabel);
     bodyWrap.appendChild(bodyArea);
     card.appendChild(bodyWrap);
 
-    // Actions: up / down / delete
+    // Actions
     const actions = document.createElement("div");
     actions.className = "actions";
-
-    const upBtn = document.createElement("button");
-    upBtn.dataset.action = "up";
-    upBtn.dataset.idx = String(i);
-    upBtn.disabled = i === 0;
-    upBtn.textContent = TL.t("btnUp");
-    actions.appendChild(upBtn);
-
-    const downBtn = document.createElement("button");
-    downBtn.dataset.action = "down";
-    downBtn.dataset.idx = String(i);
-    downBtn.disabled = i === total - 1;
-    downBtn.textContent = TL.t("btnDown");
-    actions.appendChild(downBtn);
-
-    const delBtn = document.createElement("button");
-    delBtn.className = "danger";
-    delBtn.dataset.action = "delete";
-    delBtn.dataset.idx = String(i);
-    delBtn.textContent = TL.t("btnDelete");
+    actions.appendChild(actionBtn("up", i, TL.t("btnUp"), i === 0));
+    actions.appendChild(actionBtn("down", i, TL.t("btnDown"), i === total - 1));
+    const delBtn = actionBtn("delete", i, TL.t("btnDelete"), false);
+    delBtn.classList.add("danger");
     actions.appendChild(delBtn);
-
     card.appendChild(actions);
 
     return card;
   }
 
-  // --- Render templates (uses DocumentFragment + event delegation) ---
+  function labeledInput(labelText, field, idx, value, maxLen) {
+    const wrap = document.createElement("div");
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const input = document.createElement("input");
+    input.dataset.field = field;
+    input.dataset.idx = String(idx);
+    input.value = value;
+    input.maxLength = maxLen;
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    return wrap;
+  }
+
+  function actionBtn(action, idx, text, disabled) {
+    const btn = document.createElement("button");
+    btn.dataset.action = action;
+    btn.dataset.idx = String(idx);
+    btn.disabled = disabled;
+    btn.textContent = text;
+    return btn;
+  }
+
+  // --- Render ---
   function render() {
     const frag = document.createDocumentFragment();
-    templates.forEach((tpl, i) => {
+    const list = visibleTemplates();
+    if (list.length === 0 && searchTerm) {
+      const empty = document.createElement("div");
+      empty.className = "hint";
+      empty.textContent = TL.t("searchNoResults");
+      refs.templates.replaceChildren(empty);
+      return;
+    }
+    // Cards are indexed by their position in the FULL templates array so
+    // edits/reorder stay correct even while a search filter is active.
+    list.forEach((tpl) => {
+      const i = templates.indexOf(tpl);
       frag.appendChild(buildTemplateCard(tpl, i, templates.length));
     });
     refs.templates.replaceChildren(frag);
   }
 
-  // --- Event delegation for all template interactions ---
-
-  // Text inputs: live update + debounced save
+  // --- Live text edits ---
   refs.templates.addEventListener("input", (e) => {
-    const el = e.target;
+    const el = /** @type {any} */ (e.target);
     const field = el.dataset?.field;
     if (!field) return;
     const idx = Number(el.dataset.idx);
     if (!templates[idx]) return;
 
-    // Shortcut: strip invalid chars live
     let value = el.value;
     if (field === "shortcut") {
-      value = value.replace(/[^\w-]/g, "");
+      value = value.replace(new RegExp(`[^${TL.SHORTCUT_CHARS}]`, "g"), "");
       if (value !== el.value) el.value = value;
+      templates[idx].shortcut = value;
+    } else if (field === "tags") {
+      templates[idx].tags = TL.normalizeTags(value.split(","));
+    } else {
+      templates[idx][field] = value;
+      if (field === "name") {
+        const header = el.closest(".template").querySelector(".template-name-inline");
+        if (header) header.textContent = value;
+      }
     }
-    templates[idx][field] = value;
-
-    // Live sync the name display in header
-    if (field === "name") {
-      const header = el.closest(".template").querySelector(".template-name-inline");
-      if (header) header.textContent = value;
-    }
-
     save();
   });
 
-  // Checkbox selection
+  // --- Checkbox selection (id-based) ---
   refs.templates.addEventListener("change", (e) => {
-    const el = e.target;
+    const el = /** @type {any} */ (e.target);
     if (el.matches('input[type="checkbox"][data-select]')) {
-      const idx = Number(el.dataset.select);
-      if (el.checked) selectedIndices.add(idx);
-      else selectedIndices.delete(idx);
+      const id = el.dataset.select;
+      if (el.checked) selectedIds.add(id);
+      else selectedIds.delete(id);
       el.closest(".template").classList.toggle("selected", el.checked);
       updateSelectionBar();
     }
   });
 
-  // Action buttons (up/down/delete/export-one)
+  // --- Action buttons ---
   refs.templates.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-action]");
+    const btn = /** @type {any} */ (e.target).closest("button[data-action]");
     if (!btn) return;
-
     const idx = Number(btn.dataset.idx);
     const action = btn.dataset.action;
 
     if (action === "delete") {
       if (!confirm(TL.t("confirmDelete"))) return;
-      templates.splice(idx, 1);
-      // Shift selection indices
-      const next = new Set();
-      selectedIndices.forEach((i) => {
-        if (i === idx) return;
-        next.add(i > idx ? i - 1 : i);
-      });
-      selectedIndices = next;
+      await TL.pushBackup(); // safety net before a destructive op
+      const [removed] = templates.splice(idx, 1);
+      if (removed) selectedIds.delete(removed.id);
     } else if (action === "up" && idx > 0) {
       [templates[idx - 1], templates[idx]] = [templates[idx], templates[idx - 1]];
-      // Keep selection in sync
-      swapSelection(idx - 1, idx);
     } else if (action === "down" && idx < templates.length - 1) {
       [templates[idx + 1], templates[idx]] = [templates[idx], templates[idx + 1]];
-      swapSelection(idx, idx + 1);
     } else if (action === "export-one") {
       const tpl = templates[idx];
       exportTemplates([tpl], TL.sanitizeFilename(tpl.name));
@@ -305,22 +320,44 @@
     } else {
       return;
     }
-
     await saveNow();
     render();
     updateSelectionBar();
   });
 
-  function swapSelection(a, b) {
-    const hasA = selectedIndices.has(a);
-    const hasB = selectedIndices.has(b);
-    selectedIndices.delete(a);
-    selectedIndices.delete(b);
-    if (hasA) selectedIndices.add(b);
-    if (hasB) selectedIndices.add(a);
-  }
+  // --- Drag-drop reorder (plan step 17) ---
+  let dragId = null;
+  refs.templates.addEventListener("dragstart", (e) => {
+    const card = /** @type {any} */ (e.target).closest(".template");
+    if (!card) return;
+    dragId = card.dataset.id;
+    card.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+  });
+  refs.templates.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const card = /** @type {any} */ (e.target).closest(".template");
+    refs.templates.querySelectorAll(".drag-over").forEach((c) => c.classList.remove("drag-over"));
+    if (card && card.dataset.id !== dragId) card.classList.add("drag-over");
+  });
+  refs.templates.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    const card = /** @type {any} */ (e.target).closest(".template");
+    if (!card || !dragId) return;
+    const fromIdx = templates.findIndex((t) => t.id === dragId);
+    const toIdx = templates.findIndex((t) => t.id === card.dataset.id);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+    const [moved] = templates.splice(fromIdx, 1);
+    templates.splice(toIdx, 0, moved);
+    await saveNow();
+    render();
+  });
+  refs.templates.addEventListener("dragend", () => {
+    dragId = null;
+    refs.templates.querySelectorAll(".dragging,.drag-over").forEach((c) => c.classList.remove("dragging", "drag-over"));
+  });
 
-  // --- Export helper ---
+  // --- Export helpers ---
   function exportTemplates(items, filename) {
     const json = JSON.stringify(items, null, 2);
     const blob = new Blob([json], { type: "application/json" });
@@ -331,98 +368,223 @@
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Revoke after click completes
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   // --- Top-level actions ---
   refs.btnAdd.addEventListener("click", async () => {
-    templates.push({
-      name: TL.t("defaultTpl1Name"),
-      shortcut: "",
-      body: ""
-    });
+    if (templates.length >= TL.LIMITS.MAX_TEMPLATES) {
+      showStatus(TL.t("capReached", [String(TL.LIMITS.MAX_TEMPLATES)]));
+      return;
+    }
+    templates.push({ name: TL.t("defaultTpl1Name"), shortcut: "", body: "" });
     await saveNow();
     render();
-    // Scroll to newly added
     const cards = refs.templates.querySelectorAll(".template");
-    cards.at(-1)?.scrollIntoView({ behavior: "smooth", block: "end" });
+    cards[cards.length - 1]?.scrollIntoView({ behavior: "smooth", block: "end" });
   });
 
   refs.btnExportAll.addEventListener("click", () => {
     if (templates.length === 0) return;
-    const stamp = new Date().toISOString().slice(0, 10);
-    exportTemplates(templates, `typeless-templates-${stamp}`);
+    exportTemplates(templates, `typeless-templates-${stamp()}`);
+  });
+
+  refs.btnExportClip.addEventListener("click", async () => {
+    if (templates.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(templates, null, 2));
+      showStatus(TL.t("clipCopied"));
+    } catch (_) {
+      showStatus(TL.t("statusError"));
+    }
   });
 
   refs.btnExportSelected.addEventListener("click", () => {
-    const indices = [...selectedIndices].sort((a, b) => a - b);
-    if (indices.length === 0) return;
-    const selected = indices.map((i) => templates[i]);
-    const stamp = new Date().toISOString().slice(0, 10);
-    exportTemplates(selected, `typeless-selected-${stamp}`);
+    const selected = templates.filter((t) => selectedIds.has(t.id));
+    if (selected.length === 0) return;
+    exportTemplates(selected, `typeless-selected-${stamp()}`);
   });
 
   refs.btnDeselectAll.addEventListener("click", () => {
-    selectedIndices.clear();
+    selectedIds.clear();
     render();
     updateSelectionBar();
   });
 
-  // --- Import flow ---
-  refs.btnImport.addEventListener("click", () => {
-    refs.importFile.click();
+  function stamp() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  // --- Search ---
+  refs.search.addEventListener("input", () => {
+    searchTerm = refs.search.value.trim();
+    render();
   });
 
-  refs.importFile.addEventListener("change", async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // --- Variable insert menu ---
+  const VARS = [
+    { token: "{{cursor}}", key: "varCursor" },
+    { token: "{{date}}", key: "varDate" },
+    { token: "{{date+3d}}", key: "varDateOffset" },
+    { token: "{{time}}", key: "varTime" },
+    { token: "{{datetime}}", key: "varDatetime" },
+    { token: "{{name|Label|text|default}}", key: "varField" },
+  ];
+  function buildVarMenu() {
+    refs.varList.replaceChildren();
+    for (const v of VARS) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const code = document.createElement("code");
+      code.textContent = v.token;
+      btn.appendChild(code);
+      btn.appendChild(document.createTextNode(" — " + TL.t(v.key)));
+      btn.addEventListener("click", () => { insertVariable(v.token); refs.varList.classList.remove("open"); });
+      refs.varList.appendChild(btn);
+    }
+  }
+  refs.varBtn.addEventListener("click", () => refs.varList.classList.toggle("open"));
+  document.addEventListener("click", (e) => {
+    if (!/** @type {any} */ (e.target).closest(".var-menu")) refs.varList.classList.remove("open");
+  });
+  function insertVariable(token) {
+    const ta = lastFocusedBody;
+    if (!ta) { showStatus(TL.t("varNeedField")); return; }
+    const idx = Number(ta.dataset.idx);
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);
+    if (templates[idx]) templates[idx].body = ta.value;
+    ta.focus();
+    const pos = start + token.length;
+    ta.setSelectionRange(pos, pos);
+    save();
+  }
 
+  // --- Backups panel ---
+  refs.btnBackups.addEventListener("click", async () => {
+    const open = refs.backupsPanel.classList.toggle("visible");
+    if (open) await renderBackups();
+  });
+
+  async function renderBackups() {
+    const backups = await TL.getBackups();
+    refs.backupsList.replaceChildren();
+    if (backups.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "backup-meta";
+      empty.textContent = TL.t("backupEmpty");
+      refs.backupsList.appendChild(empty);
+      return;
+    }
+    for (const b of backups) {
+      const item = document.createElement("div");
+      item.className = "backup-item";
+      const meta = document.createElement("span");
+      meta.className = "backup-meta";
+      meta.textContent = `${new Date(b.ts).toLocaleString()} · ${TL.t("backupCount", [String(b.count || (b.templates || []).length)])}`;
+      const btn = document.createElement("button");
+      btn.className = "small";
+      btn.textContent = TL.t("backupRestore");
+      btn.addEventListener("click", async () => {
+        if (!confirm(TL.t("confirmRestore"))) return;
+        await TL.pushBackup(); // snapshot current before overwriting
+        await TL.restoreBackup(b.ts);
+        templates = await TL.getTemplates();
+        selectedIds.clear();
+        render();
+        updateSelectionBar();
+        await renderBackups();
+        showStatus(TL.t("backupRestored"));
+      });
+      item.append(meta, btn);
+      refs.backupsList.appendChild(item);
+    }
+  }
+
+  // ============================================================
+  // Import flow — size guard, competitor auto-detect, conflicts
+  // ============================================================
+  refs.btnImport.addEventListener("click", () => refs.importFile.click());
+
+  refs.importFile.addEventListener("change", async (e) => {
+    const file = /** @type {any} */ (e.target).files?.[0];
+    if (!file) return;
     try {
+      if (file.size > TL.LIMITS.MAX_IMPORT_BYTES) {
+        throw new Error(TL.t("importTooLarge", [String(Math.round(TL.LIMITS.MAX_IMPORT_BYTES / 1024 / 1024))]));
+      }
       const text = await file.text();
       let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        throw new Error(TL.t("importInvalid"));
+      try { parsed = JSON.parse(text); } catch { throw new Error(TL.t("importInvalid")); }
+
+      // Competitor auto-detect (Text Blaze / Magical) → adapt, else native.
+      const adapted = TL.detectAndAdapt(parsed);
+      pendingSource = adapted ? adapted.source : null;
+      const raw = adapted ? adapted.items : parsed;
+
+      const summary = TL.validateTemplates(raw);
+      if (summary.accepted.length === 0) throw new Error(TL.t("importInvalid"));
+      pendingImport = summary.accepted;
+
+      // Build preview text + summary
+      let preview = TL.t("importPreview", [String(summary.accepted.length)]);
+      if (summary.rejected || summary.truncated) {
+        preview += " " + TL.t("importSummary", [String(summary.rejected), String(summary.truncated)]);
+      }
+      refs.importPreview.textContent = preview;
+
+      refs.importSource.textContent = pendingSource
+        ? TL.t("importSourceDetected", [pendingSource === "textblaze" ? "Text Blaze" : "Magical"])
+        : "";
+
+      // Conflicts (case-insensitive duplicate shortcuts vs existing)
+      const existing = new Set(templates.map((t) => (t.shortcut || "").toLowerCase()).filter(Boolean));
+      pendingConflicts = pendingImport
+        .map((t) => (t.shortcut || "").toLowerCase())
+        .filter((s) => s && existing.has(s));
+      if (pendingConflicts.length) {
+        refs.conflictText.textContent = TL.t("conflictText", [String(pendingConflicts.length)]);
+        refs.conflictNote.classList.add("visible");
+      } else {
+        refs.conflictNote.classList.remove("visible");
       }
 
-      const valid = TL.validateTemplates(parsed);
-      if (valid.length === 0) throw new Error(TL.t("importInvalid"));
-
-      pendingImport = valid;
-      refs.importPreview.textContent = TL.t("importPreview", [String(valid.length)]);
       refs.importModal.classList.add("visible");
     } catch (err) {
       alert(TL.t("importError", [err.message]));
     } finally {
-      // Reset so same file can be re-selected
-      e.target.value = "";
+      /** @type {any} */ (e.target).value = "";
     }
   });
 
   function closeImportModal() {
     refs.importModal.classList.remove("visible");
+    refs.conflictNote.classList.remove("visible");
     pendingImport = null;
+    pendingConflicts = [];
+    pendingSource = null;
   }
-
   refs.importCancel.addEventListener("click", closeImportModal);
-
   refs.importModal.addEventListener("click", (e) => {
     if (e.target === refs.importModal) closeImportModal();
   });
 
   refs.importConfirm.addEventListener("click", async () => {
     if (!pendingImport) return;
-    const mode = document.querySelector('input[name="import-mode"]:checked')?.value;
+    const mode = /** @type {any} */ (document.querySelector('input[name="import-mode"]:checked'))?.value;
+    const conflictMode = /** @type {any} */ (document.querySelector('input[name="conflict-mode"]:checked'))?.value || "keepboth";
     const count = pendingImport.length;
 
+    await TL.pushBackup(); // safety net before import
+
     if (mode === "replace") {
-      templates = pendingImport;
-      selectedIndices.clear();
+      templates = pendingImport.slice();
+      selectedIds.clear();
     } else {
-      templates = templates.concat(pendingImport);
+      templates = mergeImport(templates, pendingImport, conflictMode);
     }
+    if (templates.length > TL.LIMITS.MAX_TEMPLATES) templates = templates.slice(0, TL.LIMITS.MAX_TEMPLATES);
 
     await saveNow();
     closeImportModal();
@@ -431,30 +593,50 @@
     showStatus(TL.t("importSuccess", [String(count)]));
   });
 
+  // Merge incoming into existing applying the chosen conflict strategy.
+  function mergeImport(existing, incoming, conflictMode) {
+    if (conflictMode === "keepboth") return existing.concat(incoming);
+    const byShortcut = new Map();
+    existing.forEach((t, i) => { if (t.shortcut) byShortcut.set(t.shortcut.toLowerCase(), i); });
+    const result = existing.slice();
+    for (const inc of incoming) {
+      const key = (inc.shortcut || "").toLowerCase();
+      if (key && byShortcut.has(key)) {
+        if (conflictMode === "skip") continue;
+        if (conflictMode === "overwrite") {
+          const i = byShortcut.get(key);
+          result[i] = { ...result[i], name: inc.name, body: inc.body, tags: inc.tags, fields: inc.fields };
+          continue;
+        }
+      }
+      result.push(inc);
+    }
+    return result;
+  }
+
   // ESC closes modal
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && refs.importModal.classList.contains("visible")) {
-      closeImportModal();
-    }
+    if (e.key === "Escape" && refs.importModal.classList.contains("visible")) closeImportModal();
   });
 
   // --- Language switcher ---
   refs.langSelect.addEventListener("change", async (e) => {
-    userLang = e.target.value;
+    userLang = /** @type {any} */ (e.target).value;
     await TL.setLang(userLang);
     await TL.loadLocale(userLang);
     applyUIStrings();
     render();
   });
 
-  // --- React to storage changes from other contexts ---
+  // --- React to external storage changes ---
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (changes.templates) {
       if (suppressNextStorageEvent) {
         suppressNextStorageEvent = false;
       } else {
-        templates = changes.templates.newValue || [];
+        const next = /** @type {any[]} */ (changes.templates.newValue || []);
+        templates = next.slice().sort((a, b) => a.order - b.order);
         render();
         updateSelectionBar();
       }

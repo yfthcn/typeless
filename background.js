@@ -1,12 +1,12 @@
+// @ts-check
 // ==============================
 // TypeLess — Background
 // ==============================
-// Chrome/Edge: çalışır as service_worker (MV3)
-// Firefox: çalışır as background scripts (common.js manifest tarafından önceden yüklenir)
+// Chrome/Edge: service_worker (MV3). Firefox: background.scripts
+// (common.js is loaded first by the manifest).
 // ==============================
 
-// Eğer common.js zaten yüklenmişse (Firefox background.scripts) atla.
-// Yoksa (Chrome service_worker) importScripts ile yükle.
+// Load common.js in the service-worker context if not already present.
 if (typeof self.TL === "undefined") {
   try {
     self.importScripts("common.js");
@@ -15,7 +15,7 @@ if (typeof self.TL === "undefined") {
   }
 }
 
-// --- Keyboard shortcut handling ---
+// --- Keyboard shortcut handling: quick-slot paste resolves by order ---
 chrome.commands.onCommand.addListener(async (command) => {
   const match = /^paste-template-(\d+)$/.exec(command);
   if (!match) return;
@@ -24,10 +24,9 @@ chrome.commands.onCommand.addListener(async (command) => {
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
-
   if (TL.isSystemUrl(tab.url)) return;
 
-  const templates = await TL.getTemplates();
+  const templates = await TL.getTemplates(); // order-sorted
   const template = templates[index];
   if (!template) return;
 
@@ -38,36 +37,41 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-// --- Default templates on first install ---
+// --- Install / update: defaults on install, authoritative migrate on update ---
+// This is the single writer for migration: it reads the whole store, migrates
+// it to the current schema and writes once. Other contexts migrate-on-read
+// without writing. (Plan step 7)
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
-  if (reason !== "install") return;
+  if (reason === "install") {
+    const existing = await TL.getTemplates();
+    if (existing.length > 0) return;
 
-  const existing = await TL.getTemplates();
-  if (existing.length > 0) return;
+    const lang = (chrome.i18n.getUILanguage?.() || "en").toLowerCase();
+    const isTurkish = lang.startsWith("tr");
+    await TL.loadLocale(isTurkish ? "tr" : "en");
 
-  // Use browser's UI language for defaults
-  const lang = (chrome.i18n.getUILanguage?.() || "en").toLowerCase();
-  const isTurkish = lang.startsWith("tr");
+    const defaults = [
+      { name: TL.t("defaultTpl1Name"), shortcut: isTurkish ? "sifre" : "pass", body: TL.t("defaultTpl1Body") },
+      { name: TL.t("defaultTpl2Name"), shortcut: isTurkish ? "bilgi" : "info", body: TL.t("defaultTpl2Body") },
+      { name: TL.t("defaultTpl3Name"), shortcut: isTurkish ? "kapanis" : "close", body: TL.t("defaultTpl3Body") },
+    ];
+    await TL.setTemplates(defaults);
+    return;
+  }
 
-  await TL.loadLocale(isTurkish ? "tr" : "en");
-
-  const defaults = [
-    {
-      name: TL.t("defaultTpl1Name"),
-      shortcut: isTurkish ? "sifre" : "pass",
-      body: TL.t("defaultTpl1Body")
-    },
-    {
-      name: TL.t("defaultTpl2Name"),
-      shortcut: isTurkish ? "bilgi" : "info",
-      body: TL.t("defaultTpl2Body")
-    },
-    {
-      name: TL.t("defaultTpl3Name"),
-      shortcut: isTurkish ? "kapanis" : "close",
-      body: TL.t("defaultTpl3Body")
+  if (reason === "update") {
+    try {
+      const raw = await chrome.storage.local.get(null);
+      if (raw.schemaVersion === TL.CURRENT_SCHEMA) return; // already migrated
+      const migrated = TL.migrate(raw);
+      await chrome.storage.local.set({
+        templates: migrated.templates,
+        quickSlots: migrated.quickSlots,
+        schemaVersion: TL.CURRENT_SCHEMA,
+      });
+      console.info("[TypeLess] Migrated store to schema v" + TL.CURRENT_SCHEMA);
+    } catch (err) {
+      console.error("[TypeLess] Migration on update failed:", err);
     }
-  ];
-
-  await TL.setTemplates(defaults);
+  }
 });

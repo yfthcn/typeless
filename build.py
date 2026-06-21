@@ -29,6 +29,9 @@ EXCLUDES = {
     ".git", ".gitignore", "dist", "build.py",
     "node_modules", ".DS_Store", "Thumbs.db",
     "typeless.zip", "typeless.xpi",
+    # Dev-only tooling — never shipped in the store packages.
+    "test", "types", "package.json", "package-lock.json",
+    "jsconfig.json", "tsconfig.json",
 }
 
 # Glob patterns for excluded files (e.g. internal dev/audit notes).

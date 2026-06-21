@@ -95,7 +95,10 @@
   "selectedCount": {
     "message": "$COUNT$ seçili",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "exportSingleTooltip": {
@@ -113,7 +116,10 @@
   "importPreview": {
     "message": "Dosyada $COUNT$ template bulundu",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "importCancel": {
@@ -122,7 +128,10 @@
   "importSuccess": {
     "message": "$COUNT$ template başarıyla içe aktarıldı ✓",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "statusSaved": {
@@ -152,25 +161,36 @@
   "indexLabel": {
     "message": "$INDEX$. template",
     "placeholders": {
-      "index": { "content": "$1", "example": "1" }
+      "index": {
+        "content": "$1",
+        "example": "1"
+      }
     }
   },
   "shortcutLabel": {
     "message": " — Klavye kısayolu: Ctrl+Shift+$NUM$",
     "placeholders": {
-      "num": { "content": "$1", "example": "1" }
+      "num": {
+        "content": "$1",
+        "example": "1"
+      }
     }
   },
   "importConfirm": {
     "message": "$COUNT$ template içe aktarılacak. Mevcut template'lerin üzerine yazılsın mı?\n\n\"Tamam\": Üzerine yaz\n\"İptal\": Mevcutlara ekle",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "importError": {
     "message": "İçe aktarma hatası: $MSG$",
     "placeholders": {
-      "msg": { "content": "$1" }
+      "msg": {
+        "content": "$1"
+      }
     }
   },
   "importInvalid": {
@@ -195,10 +215,133 @@
     "message": "Merhaba {{musteri_adi}},\n\nTalebiniz çözüme kavuşturulmuştur. Eğer başka bir sorunuz olursa yeni ticket açabilirsiniz.\n\nİyi günler dileriz."
   },
   "statusError": {
-  "message": "Kayıt başarısız"
-},
+    "message": "Kayıt başarısız"
+  },
   "popupSystemPage": {
     "message": "TypeLess bu sayfada çalışamaz (tarayıcı sistem sayfası).\n\nNormal bir web sayfasında deneyin (ör. google.com).",
     "description": "Shown in popup when user clicks paste on a chrome:// or about: page"
+  },
+  "backupEmpty": {
+    "message": "Henüz yedek yok."
+  },
+  "backupRestore": {
+    "message": "Geri yükle"
+  },
+  "backupRestored": {
+    "message": "Yedek geri yüklendi"
+  },
+  "backupsTitle": {
+    "message": "Yerel yedekler"
+  },
+  "btnBackups": {
+    "message": "⟲ Yedekler"
+  },
+  "btnExportClip": {
+    "message": "JSON kopyala"
+  },
+  "clipCopied": {
+    "message": "Panoya kopyalandı"
+  },
+  "confirmRestore": {
+    "message": "Bu yedek geri yüklensin mi? Mevcut şablonların önce anlık yedeği alınır."
+  },
+  "conflictKeepboth": {
+    "message": "İkisini de tut"
+  },
+  "conflictOverwrite": {
+    "message": "Mevcutların üzerine yaz"
+  },
+  "conflictSkip": {
+    "message": "Yinelenenleri atla"
+  },
+  "dragHint": {
+    "message": "Sıralamak için sürükle"
+  },
+  "labelTags": {
+    "message": "Etiketler"
+  },
+  "searchNoResults": {
+    "message": "Aramanızla eşleşen şablon yok."
+  },
+  "searchPlaceholder": {
+    "message": "Şablonlarda ara…"
+  },
+  "tagsPlaceholder": {
+    "message": "virgül, ile, ayrık, etiketler"
+  },
+  "varInsert": {
+    "message": "Değişken ekle ▾"
+  },
+  "varNeedField": {
+    "message": "Önce bir şablon gövdesine tıkla."
+  },
+  "varCursor": {
+    "message": "Yapıştırmadan sonra imleç konumu"
+  },
+  "varDate": {
+    "message": "Bugünün tarihi"
+  },
+  "varDateOffset": {
+    "message": "N gün/hafta/ay kaydırılmış tarih"
+  },
+  "varTime": {
+    "message": "Şimdiki saat"
+  },
+  "varDatetime": {
+    "message": "Tarih ve saat"
+  },
+  "varField": {
+    "message": "Doldurulacak alan"
+  },
+  "backupCount": {
+    "message": "$COUNT$ şablon",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "capReached": {
+    "message": "Şablon sınırına ulaşıldı ($MAX$).",
+    "placeholders": {
+      "max": {
+        "content": "$1"
+      }
+    }
+  },
+  "conflictText": {
+    "message": "$COUNT$ kısayol zaten mevcut. Yinelenenlerin nasıl ele alınacağını seç:",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "importSourceDetected": {
+    "message": "$SOURCE$ biçimi algılandı — otomatik dönüştürüldü.",
+    "placeholders": {
+      "source": {
+        "content": "$1"
+      }
+    }
+  },
+  "importSummary": {
+    "message": "($REJECTED$ atlandı, $TRUNCATED$ kısaltıldı)",
+    "placeholders": {
+      "rejected": {
+        "content": "$1"
+      },
+      "truncated": {
+        "content": "$2"
+      }
+    }
+  },
+  "importTooLarge": {
+    "message": "Dosya çok büyük (en fazla $MAX$ MB).",
+    "placeholders": {
+      "max": {
+        "content": "$1"
+      }
+    }
   }
 }

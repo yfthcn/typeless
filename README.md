@@ -22,13 +22,19 @@ A lightweight, cross-browser extension for pasting ready-made templates into Ser
 
 ## Features
 
-- ⚡ **Three ways to paste** — keyboard shortcuts, popup menu, slash commands (`/shortcut + space`)
-- 📝 **Placeholders** — use `{{variable_name}}` and a form pops up to fill them in
+- ⚡ **Four ways to paste** — keyboard shortcuts, popup menu, slash commands (`/shortcut + space`), and a **slash autocomplete** dropdown
+- 🔎 **Slash autocomplete** — type `/` and pick from a fuzzy-matched list; no need to memorise shortcuts
+- 🧩 **Dynamic variables** — `{{date}}`, `{{date+3d}}`, `{{time}}`, `{{cursor}}` resolved locally at paste time
+- 📝 **Smart placeholders** — `{{name|Label|dropdown|default|a,b,c}}` renders text, dropdown, or date fields, with optional last-value recall
+- 🏷️ **Tags & search** — organise and find templates fast, in the options page and the popup
+- 🌙 **Dark mode** — follows your OS theme everywhere, including the in-page form
+- 💾 **Automatic local backups** — a rolling 5-snapshot safety net with one-click restore
+- 📥 **Competitor import** — bring templates over from **Text Blaze** or **Magical** automatically
 - 🌐 **Cross-browser** — Chrome 88+, Edge 88+, Firefox 140+, Brave, Opera, Vivaldi
 - 🇬🇧🇹🇷 **Bilingual** — auto-detects English or Turkish from your browser
-- 🔐 **Private by design** — no network calls, no analytics, no tracking
-- 📤 **Import / Export** — share templates as JSON (single, selected, or batch)
-- 🎨 **Universal editor support** — `<textarea>`, `<input>`, and rich editors (TinyMCE, CKEditor, Quill)
+- 🔐 **Private by design** — no network calls, no analytics, no tracking, no server
+- 📤 **Import / Export** — share templates as JSON (single, selected, batch, or copy to clipboard)
+- 🎨 **Universal editor support** — `<textarea>`, `<input>`, and rich editors (TinyMCE, CKEditor, Quill, ProseMirror)
 - ⌨️ **IME-safe** — won't interfere with Turkish, Japanese, Chinese, or Korean input methods
 - 🔒 **No innerHTML anywhere** — all DOM built via native API for maximum security
 
@@ -84,6 +90,43 @@ Best regards.
 
 When pasting, a form pops up asking for `customer_name` and `ticket_no`.
 
+### Dynamic variables
+
+These resolve automatically at paste time — entirely on your machine, no
+permissions, no network:
+
+| Variable | Result |
+|---|---|
+| `{{date}}` | Today, `YYYY-MM-DD` |
+| `{{date+3d}}` / `{{date-2w}}` | Offset by days `d`, weeks `w`, months `m`, years `y` |
+| `{{time}}` | `HH:MM` |
+| `{{datetime}}` | `YYYY-MM-DD HH:MM` |
+| `{{cursor}}` | Where the caret lands after pasting |
+
+### Smart fields
+
+Give a placeholder a type, label, default and options with pipes:
+
+```
+{{name|Full label|type|default|opt1,opt2,opt3|remember}}
+```
+
+- **type** — `text` (default), `multiline`, `dropdown`, or `date`
+- **default** — pre-filled value
+- **options** — comma-separated list (for `dropdown`)
+- **remember** — pre-fills with the last value you entered (ignored for
+  secret-looking names like `password`, `otp`, `cvv`, `token`)
+
+Example: `{{priority|Priority|dropdown|Normal|Low,Normal,High}}`
+
+Use the **Insert variable ▾** menu on the options page to add any of these
+without memorising the syntax.
+
+### Bringing templates from another tool
+
+Export your snippets from **Text Blaze** or **Magical** as JSON, then use
+**Import** — TypeLess detects the format and converts them automatically.
+
 ### Managing templates
 
 Click the icon → **⚙ Edit Templates**:
@@ -121,6 +164,13 @@ Verify this yourself: every source file is plain JavaScript. Search for `fetch(`
 git clone https://github.com/yfthcn/typeless.git
 cd typeless
 
+# Dev tooling (tests + type-check + linter). The extension itself ships
+# ZERO runtime dependencies — these are dev-only and never packaged.
+npm install
+npm test          # zero-dependency unit tests (node:test)
+npm run typecheck # tsc --noEmit over all JS via jsconfig.json
+npm run check     # both of the above
+
 # Build packages for distribution
 python3 build.py
 # Creates dist/typeless-chrome.zip and dist/typeless-firefox.zip
@@ -145,11 +195,14 @@ typeless/
 ├── background.js            # Service worker (Chrome) / background script (Firefox)
 ├── content.js               # Injected into pages — paste logic & slash detection
 ├── popup.html / popup.js    # Template picker popup
-├── options.html / .js       # Settings page — CRUD, import/export
+├── options.html / .js       # Settings page — CRUD, tags, search, backups, import/export
 ├── icons/                   # 16/48/128px extension icons
-└── _locales/
-    ├── en/messages.json     # English strings
-    └── tr/messages.json     # Turkish strings
+├── _locales/
+│   ├── en/messages.json     # English strings
+│   └── tr/messages.json     # Turkish strings
+├── test/                    # node:test unit tests (dev-only, not packaged)
+├── types/                   # ambient .d.ts for ts-check (dev-only)
+└── jsconfig.json            # ts-check config (dev-only)
 ```
 
 ### Why two packages?

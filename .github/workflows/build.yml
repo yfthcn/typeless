@@ -7,7 +7,39 @@ on:
     branches: [main]
 
 jobs:
+  test:
+    name: Lint, type-check & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dev tooling
+        run: npm install --no-audit --no-fund
+
+      - name: Unit tests (node:test, zero-dependency)
+        run: npm test
+
+      - name: Type-check (tsc --noEmit via jsconfig)
+        run: npm run typecheck
+
+      - name: Build Firefox package for linting
+        run: python3 build.py
+
+      - name: web-ext lint (non-blocking)
+        run: |
+          mkdir -p dist/firefox-unpacked
+          cd dist/firefox-unpacked && unzip -o ../typeless-firefox.zip > /dev/null && cd ../..
+          npx --yes web-ext lint --source-dir dist/firefox-unpacked --warnings-as-errors=false || true
+
   build:
+    name: Build store packages
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

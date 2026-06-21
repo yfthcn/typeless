@@ -1,53 +1,81 @@
+// @ts-check
 // ==============================
 // TypeLess — Content script
 // ==============================
-// Injected on all pages. Tracks focused inputs, pastes templates,
-// and listens for slash-command expansion (e.g. /pass + space).
+// Injected on all pages/frames. Tracks focused inputs, pastes templates
+// (plain-text, framework-safe), resolves dynamic variables + placeholder
+// forms, and powers slash-command expansion and the slash autocomplete.
 // ==============================
 
 (function () {
   "use strict";
 
-  // TL comes from common.js (loaded before this script)
+  // Per-frame double-load guard. The executeScript fallback in
+  // common.js#pasteToTab re-injects this file; without this guard the IIFE
+  // would re-run and register a second keydown/onMessage listener, causing
+  // double pastes. (Plan step 2)
+  if (self.__TL_CONTENT_LOADED__) return;
+  self.__TL_CONTENT_LOADED__ = true;
+
+  // Inert in tiny/invisible subframes (ad/tracking iframes) to cut the
+  // all_frames cost — they never hold a real editor. (Plan step 9)
+  if (self !== self.top) {
+    const w = self.innerWidth, h = self.innerHeight;
+    if ((w > 0 && w < 60) || (h > 0 && h < 60)) return;
+  }
+
   const t = (k, s) => (self.TL ? TL.t(k, s) : k);
 
   // --- State ---
   let lastFocusedElement = null;
-  let templateCache = null;
-  let cacheReady = false;
+  let templateCache = null; // null = not loaded yet (lazy)
+  let cacheLoading = null;  // in-flight promise (coalesces concurrent loads)
+  let onChangedBound = false;
 
-  // --- Load templates into cache (for slash commands) ---
-  // Initial load — slash command handler sync olarak okuyabilsin diye
-  // Promise chain ile background'da; cacheReady guard cache hazır olmadan
-  // gelen ilk slash command'leri sessizce skip eder.
-  TL.getTemplates().then((t) => {
-    templateCache = t || [];
-    cacheReady = true;
-  }).catch((err) => {
-    console.error("[TypeLess] Initial cache load failed:", err);
-    templateCache = [];
-    cacheReady = true;
-  });
-
-  // Storage değişikliği → cache'i tazele
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && changes.templates) {
-      templateCache = changes.templates.newValue || [];
-    }
-  });
-
-  // Sync getter — slash handler'ın await'siz template lookup yapabilmesi için
-  function getCachedTemplatesSync() {
-    return cacheReady ? templateCache : [];
+  // --- Lazy template cache (plan steps 8/9) ---
+  // No eager load. ensureCache() fires on first editable focus and before a
+  // paste; the storage.onChanged listener is only wired once we've loaded.
+  function ensureCache() {
+    if (templateCache) return Promise.resolve(templateCache);
+    if (cacheLoading) return cacheLoading;
+    cacheLoading = TL.getTemplates()
+      .then((list) => {
+        templateCache = list || [];
+        bindOnChanged();
+        return templateCache;
+      })
+      .catch((err) => {
+        console.error("[TypeLess] Cache load failed:", err);
+        templateCache = [];
+        return templateCache;
+      })
+      .finally(() => { cacheLoading = null; });
+    return cacheLoading;
   }
 
-  // --- Track last focused editable element ---
+  function bindOnChanged() {
+    if (onChangedBound) return;
+    onChangedBound = true;
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && changes.templates) {
+        const next = /** @type {any[]} */ (changes.templates.newValue || []);
+        templateCache = next.slice().sort((a, b) => a.order - b.order);
+      }
+    });
+  }
+
+  function getCachedTemplatesSync() {
+    return templateCache || [];
+  }
+
+  // --- Track last focused editable element + warm the cache ---
   document.addEventListener(
     "focusin",
     (e) => {
       const el = e.target;
       if (el && isEditable(el)) {
         lastFocusedElement = el;
+        ensureCache();
       }
     },
     true
@@ -58,16 +86,13 @@
     if (el.tagName === "TEXTAREA") return true;
     if (el.tagName === "INPUT") {
       const type = (el.type || "text").toLowerCase();
-      // password tipini bilinçli olarak hariç tutuyoruz:
-      // - Gizlilik: kullanıcı login formunda kazara /shortcut yazarsa
-      //   şablon password input'una expand olmamalı
-      // - AMO inceleme prensibi: extension password input'una müdahale etmemeli
+      // password intentionally excluded (privacy + AMO review principle).
       return ["text", "search", "email", "url", "tel", ""].includes(type);
     }
     return el.isContentEditable === true;
   }
 
-  // Use native setter so React/Vue/Angular frameworks detect the change
+  // Native setter so React/Vue/Angular detect the change.
   function setNativeValue(el, value) {
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
@@ -75,7 +100,12 @@
     else el.value = value;
   }
 
-  // --- Paste strategies ---
+  const CURSOR = TL.CURSOR_TOKEN;
+  const stripCursor = (s) => s.split(CURSOR).join("");
+
+  // ============================================================
+  // Paste — plain-text, undo-preserving (plan step 3)
+  // ============================================================
   function pasteIntoElement(el, text) {
     if (!el) return false;
 
@@ -83,153 +113,208 @@
     if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
       const start = el.selectionStart ?? el.value.length;
       const end = el.selectionEnd ?? el.value.length;
-      const newValue = el.value.slice(0, start) + text + el.value.slice(end);
-
+      const newValue = el.value.slice(0, start) + stripCursor(text) + el.value.slice(end);
       setNativeValue(el, newValue);
-
-      const newPos = start + text.length;
-      el.setSelectionRange?.(newPos, newPos);
+      placeCaretInInput(el, start, text);
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
       return true;
     }
 
-    // 2. ContentEditable (TinyMCE, CKEditor, Quill, etc.)
+    // 2. ContentEditable (TinyMCE, CKEditor, Quill, ProseMirror, Gmail…)
     if (el.isContentEditable) {
       el.focus();
-      const htmlText = TL.escapeHtml(text).replace(/\n/g, "<br>");
-      try {
-        // execCommand is deprecated but still the most compatible for rich editors
-        const ok = document.execCommand("insertHTML", false, htmlText);
-        if (ok) {
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-          return true;
+      const markerIdx = text.indexOf(CURSOR);
+      const plain = stripCursor(text);
+      // execCommand("insertText") — plain text, preserves the editor's own
+      // undo stack and model far better than insertHTML; no HTML injection.
+      let ok = false;
+      try { ok = document.execCommand("insertText", false, plain); } catch (_) {}
+      if (!ok) {
+        const sel = window.getSelection();
+        if (sel?.rangeCount) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(document.createTextNode(plain));
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
         }
-      } catch (_) {}
-      // Fallback: manipulate Selection API
-      const sel = window.getSelection();
-      if (sel?.rangeCount) {
-        const range = sel.getRangeAt(0);
-        range.deleteContents();
-        range.insertNode(document.createTextNode(text));
-        range.collapse(false);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      el.dispatchEvent(new Event("input", { bubbles: true }));
+      if (markerIdx >= 0) moveCaretBackEditable(plain.length - markerIdx);
       return true;
     }
-
     return false;
   }
 
-  // --- Placeholder form (rendered in Shadow DOM for isolation) ---
-  function showPlaceholderForm(placeholders, templateName) {
+  // After inserting into an input/textarea, honour a {{cursor}} marker;
+  // otherwise place caret at end of inserted text.
+  function placeCaretInInput(el, start, insertedWithMarker) {
+    const markerIdx = insertedWithMarker.indexOf(CURSOR);
+    const pos = markerIdx >= 0 ? start + markerIdx : start + stripCursor(insertedWithMarker).length;
+    el.setSelectionRange?.(pos, pos);
+  }
+
+  function moveCaretBackEditable(steps) {
+    const sel = window.getSelection();
+    if (!sel || steps <= 0) return;
+    for (let i = 0; i < steps; i++) sel.modify?.("move", "backward", "character");
+  }
+
+  // ============================================================
+  // Shared in-page theme (modal, toast, autocomplete, form) — dark aware
+  // (plan steps 10/13). One CSS string, prefers-color-scheme.
+  // ============================================================
+  const THEME_CSS = `
+    :host { all: initial; }
+    * { box-sizing: border-box; }
+    .tl-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+      display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .tl-modal {
+      background: #ffffff; color: #111827;
+      padding: 24px; border-radius: 10px;
+      min-width: 380px; max-width: 520px; width: 92%;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+      max-height: 85vh; overflow-y: auto;
+    }
+    .tl-modal h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+    .tl-tname { margin: 0 0 16px; font-size: 13px; color: #6b7280; font-weight: 500; }
+    label { display: block; margin-bottom: 12px; font-size: 13px; color: #374151; }
+    label span.lbl { display: block; margin-bottom: 5px; font-weight: 600; }
+    input, select, textarea {
+      width: 100%; padding: 9px 11px;
+      border: 1px solid #d1d5db; border-radius: 6px;
+      font-size: 14px; font-family: inherit;
+      background: #ffffff; color: #111827;
+    }
+    textarea { min-height: 70px; resize: vertical; }
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: #4f46e5;
+      box-shadow: 0 0 0 3px rgba(79,70,229,0.15);
+    }
+    .tl-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+    button {
+      padding: 9px 18px; border-radius: 6px; cursor: pointer;
+      font-size: 14px; font-family: inherit; font-weight: 500;
+    }
+    .tl-cancel { border: 1px solid #d1d5db; background: #ffffff; color: #374151; }
+    .tl-submit { border: none; background: #4f46e5; color: #ffffff; }
+    .tl-submit:hover { background: #4338ca; }
+    .tl-submit:focus-visible, .tl-cancel:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }
+    .tl-toast {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1f2937; color: #fff; padding: 12px 18px;
+      border-radius: 8px; font-size: 14px; max-width: 340px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.25); border-left: 3px solid #4f46e5;
+      animation: tlIn .2s ease-out, tlOut .3s ease-in 3s forwards;
+    }
+    @keyframes tlIn { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes tlOut { to { opacity: 0; transform: translateX(20px); } }
+    .tl-ac {
+      position: fixed; z-index: 2147483647; min-width: 220px; max-width: 360px;
+      background: #fff; color: #111827; border: 1px solid #e5e7eb; border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18); overflow: hidden;
+      font-family: system-ui, -apple-system, sans-serif; font-size: 13px;
+    }
+    .tl-ac-item { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; cursor: pointer; }
+    .tl-ac-item .nm { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tl-ac-item .sc { color: #6b7280; font-family: ui-monospace, monospace; }
+    .tl-ac-item.active { background: #eef2ff; }
+    @media (prefers-color-scheme: dark) {
+      .tl-modal { background: #1f2937; color: #f3f4f6; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+      .tl-modal h3 { color: #f9fafb; }
+      .tl-tname { color: #9ca3af; }
+      label { color: #d1d5db; }
+      input, select, textarea { background: #111827; color: #f3f4f6; border-color: #374151; }
+      .tl-cancel { background: #374151; color: #e5e7eb; border-color: #4b5563; }
+      .tl-ac { background: #1f2937; color: #f3f4f6; border-color: #374151; }
+      .tl-ac-item .sc { color: #9ca3af; }
+      .tl-ac-item.active { background: #312e81; }
+    }
+  `;
+
+  function makeShadowHost(positionCss) {
+    const host = document.createElement("div");
+    host.style.cssText = positionCss;
+    const shadow = host.attachShadow({ mode: "closed" });
+    const style = document.createElement("style");
+    style.textContent = THEME_CSS;
+    shadow.appendChild(style);
+    return { host, shadow };
+  }
+
+  // ============================================================
+  // Placeholder form (Shadow DOM, dark-aware) — smart fields (plan step 11)
+  // ============================================================
+  function showPlaceholderForm(fields, templateName, lastValues) {
     return new Promise((resolve) => {
-      const host = document.createElement("div");
-      host.style.cssText = "position:fixed;inset:0;z-index:2147483647;";
-      const shadow = host.attachShadow({ mode: "closed" });
-
-      // Styles (text-only, no HTML injection)
-      const style = document.createElement("style");
-      style.textContent = `
-        :host {
-          all: initial;
-          color-scheme: light;
-        }
-        * { box-sizing: border-box; }
-        .backdrop {
-          position:fixed;inset:0;background:rgba(0,0,0,0.55);
-          display:flex;align-items:center;justify-content:center;
-          font-family:system-ui,-apple-system,sans-serif;
-          color-scheme: light;
-        }
-        .modal {
-          background:#ffffff;color:#111827;
-          padding:24px;border-radius:10px;
-          min-width:380px;max-width:500px;
-          box-shadow:0 20px 50px rgba(0,0,0,0.3);
-        }
-        h3 { margin:0 0 18px;font-size:16px;color:#111827;font-weight:600; }
-        .template-name { margin:-12px 0 16px;font-size:13px;color:#6b7280;font-weight:500; }
-        label { display:block;margin-bottom:12px;font-size:13px;color:#374151; }
-        label span { display:block;margin-bottom:5px;font-weight:600;color:#374151; }
-        input {
-          width:100%;padding:9px 11px;
-          border:1px solid #d1d5db;border-radius:6px;
-          font-size:14px;font-family:inherit;
-          background:#ffffff;color:#111827;
-          transition: border-color .15s, box-shadow .15s;
-        }
-        input:focus {
-          outline:none;
-          border-color:#4f46e5;
-          box-shadow:0 0 0 3px rgba(79,70,229,0.15);
-        }
-        .actions { display:flex;gap:8px;justify-content:flex-end;margin-top:18px; }
-        button {
-          padding:9px 18px;border-radius:6px;cursor:pointer;
-          font-size:14px;font-family:inherit;font-weight:500;
-          transition: all .15s;
-        }
-        .cancel {
-          border:1px solid #d1d5db;
-          background:#ffffff;color:#374151;
-        }
-        .cancel:hover { background:#f9fafb;border-color:#9ca3af; }
-        .submit {
-          border:none;
-          background:#4f46e5;color:#ffffff;
-        }
-        .submit:hover { background:#4338ca; }
-        .submit:focus-visible, .cancel:focus-visible {
-          outline:2px solid #4f46e5;outline-offset:2px;
-        }
-      `;
-      shadow.appendChild(style);
-
+      const { host, shadow } = makeShadowHost("position:fixed;inset:0;z-index:2147483647;");
       const backdrop = document.createElement("div");
-      backdrop.className = "backdrop";
+      backdrop.className = "tl-backdrop";
 
       const modal = document.createElement("div");
-      modal.className = "modal";
+      modal.className = "tl-modal";
       modal.setAttribute("role", "dialog");
-      modal.setAttribute("aria-labelledby", "h");
+      modal.setAttribute("aria-labelledby", "tl-h");
 
       const heading = document.createElement("h3");
-      heading.id = "h";
+      heading.id = "tl-h";
       heading.textContent = t("formHeading");
       modal.appendChild(heading);
 
       if (templateName) {
         const nameEl = document.createElement("div");
-        nameEl.className = "template-name";
+        nameEl.className = "tl-tname";
         nameEl.textContent = templateName;
         modal.appendChild(nameEl);
       }
 
       const form = document.createElement("form");
+      const controls = [];
 
-      const inputs = [];
-      for (const p of placeholders) {
+      for (const f of fields) {
         const labelEl = document.createElement("label");
         const spanEl = document.createElement("span");
-        spanEl.textContent = p;
-        const inputEl = document.createElement("input");
-        inputEl.dataset.ph = p;
+        spanEl.className = "lbl";
+        spanEl.textContent = f.label || f.name;
         labelEl.appendChild(spanEl);
-        labelEl.appendChild(inputEl);
+
+        const remembered = (f.remember && lastValues && lastValues[f.name]) || "";
+        let control;
+        if (f.type === "dropdown" && f.options.length) {
+          control = document.createElement("select");
+          for (const opt of f.options) {
+            const o = document.createElement("option");
+            o.value = opt; o.textContent = opt;
+            control.appendChild(o);
+          }
+          control.value = remembered || f.def || f.options[0];
+        } else if (f.type === "multiline") {
+          control = document.createElement("textarea");
+          control.value = remembered || f.def || "";
+        } else {
+          control = document.createElement("input");
+          control.type = f.type === "date" ? "date" : "text";
+          control.value = remembered || f.def || "";
+        }
+        control.dataset.ph = f.name;
+        control.dataset.remember = f.remember ? "1" : "";
+        labelEl.appendChild(control);
         form.appendChild(labelEl);
-        inputs.push(inputEl);
+        controls.push(control);
       }
 
       const actions = document.createElement("div");
-      actions.className = "actions";
+      actions.className = "tl-actions";
       const cancelBtn = document.createElement("button");
-      cancelBtn.type = "button";
-      cancelBtn.className = "cancel";
+      cancelBtn.type = "button"; cancelBtn.className = "tl-cancel";
       cancelBtn.textContent = t("formCancel");
       const submitBtn = document.createElement("button");
-      submitBtn.type = "submit";
-      submitBtn.className = "submit";
+      submitBtn.type = "submit"; submitBtn.className = "tl-submit";
       submitBtn.textContent = t("formPaste");
       actions.appendChild(cancelBtn);
       actions.appendChild(submitBtn);
@@ -238,196 +323,179 @@
       modal.appendChild(form);
       backdrop.appendChild(modal);
       shadow.appendChild(backdrop);
-
       document.body.appendChild(host);
-
-      inputs[0]?.focus();
+      controls[0]?.focus();
 
       const cleanup = () => host.remove();
-
-      cancelBtn.addEventListener("click", () => {
-        cleanup();
-        resolve(null);
-      });
-
+      cancelBtn.addEventListener("click", () => { cleanup(); resolve(null); });
       shadow.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
-          cleanup();
-          resolve(null);
-        }
+        if (e.key === "Escape") { cleanup(); resolve(null); }
       });
-
+      backdrop.addEventListener("mousedown", (e) => {
+        if (e.target === backdrop) { cleanup(); resolve(null); }
+      });
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         const values = {};
-        inputs.forEach((inp) => {
-          values[inp.dataset.ph] = inp.value;
+        const remember = {};
+        controls.forEach((c) => {
+          values[c.dataset.ph] = c.value;
+          if (c.dataset.remember) remember[c.dataset.ph] = c.value;
         });
         cleanup();
-        resolve(values);
+        resolve({ values, remember });
       });
     });
   }
 
-  // --- Main paste flow ---
+  // --- Toast ---
+  function showToast(message) {
+    const { host, shadow } = makeShadowHost("position:fixed;top:20px;right:20px;z-index:2147483647;");
+    const toast = document.createElement("div");
+    toast.className = "tl-toast";
+    toast.textContent = message;
+    shadow.appendChild(toast);
+    document.body.appendChild(host);
+    setTimeout(() => host.remove(), 3500);
+  }
+
+  // ============================================================
+  // Main paste flow — dynamic vars → fields → fill → insert → caret
+  // ============================================================
   async function handlePaste(template) {
     const target =
       (document.activeElement && isEditable(document.activeElement))
         ? document.activeElement
         : lastFocusedElement;
 
-    if (!target) {
-      showToast(t("needFocus"));
+    if (!target) { showToast(t("needFocus")); return; }
+
+    const withVars = TL.applyDynamicVars(template.body);
+    const fields = TL.parseFields(withVars);
+
+    if (fields.length === 0) {
+      target.focus();
+      pasteIntoElement(target, withVars);
       return;
     }
 
-    const placeholders = TL.extractPlaceholders(template.body);
-
-    if (placeholders.length === 0) {
-      pasteIntoElement(target, template.body);
-      return;
-    }
-
-    const values = await showPlaceholderForm(placeholders, template.name);
-    if (!values) return;
-    const filled = TL.fillTemplate(template.body, values);
+    const lastValues = await getLastValues(template.id);
+    const result = await showPlaceholderForm(fields, template.name, lastValues);
+    if (!result) return;
+    const filled = TL.fillTemplate(withVars, result.values);
+    if (Object.keys(result.remember).length) saveLastValues(template.id, result.remember);
     target.focus();
-    // Small delay for focus event to settle
     setTimeout(() => pasteIntoElement(target, filled), 30);
   }
 
-  // --- Custom toast notification (replaces alert) ---
-  function showToast(message) {
-    const host = document.createElement("div");
-    host.style.cssText = "position:fixed;top:20px;right:20px;z-index:2147483647;";
-    const shadow = host.attachShadow({ mode: "closed" });
-
-    const style = document.createElement("style");
-    style.textContent = `
-      :host { all: initial; }
-      .toast {
-        font-family: system-ui, -apple-system, sans-serif;
-        background: #1f2937;
-        color: white;
-        padding: 12px 18px;
-        border-radius: 8px;
-        font-size: 14px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-        max-width: 340px;
-        animation: slideIn .2s ease-out, fadeOut .3s ease-in 3s forwards;
-        border-left: 3px solid #4f46e5;
-      }
-      @keyframes slideIn {
-        from { transform: translateX(20px); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-      }
-      @keyframes fadeOut {
-        to { opacity: 0; transform: translateX(20px); }
-      }
-    `;
-    shadow.appendChild(style);
-
-    const toast = document.createElement("div");
-    toast.className = "toast";
-    toast.textContent = message;
-    shadow.appendChild(toast);
-
-    document.body.appendChild(host);
-    setTimeout(() => host.remove(), 3500);
+  // --- Remember-last value storage (non-secret fields only) ---
+  async function getLastValues(templateId) {
+    if (!templateId) return {};
+    try {
+      const { lastValues = {} } = await chrome.storage.local.get("lastValues");
+      return lastValues[templateId] || {};
+    } catch (_) { return {}; }
+  }
+  async function saveLastValues(templateId, values) {
+    if (!templateId) return;
+    try {
+      const { lastValues = {} } = await chrome.storage.local.get("lastValues");
+      lastValues[templateId] = { ...(lastValues[templateId] || {}), ...values };
+      await chrome.storage.local.set({ lastValues });
+    } catch (_) {}
   }
 
   // --- Message listener (from popup / background) ---
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "PASTE_TEMPLATE" && msg.template) {
-      handlePaste(msg.template);
+      ensureCache().finally(() => handlePaste(msg.template));
       sendResponse({ ok: true });
     }
     return true;
   });
 
-  // --- Slash command expansion ---
-  // Stratejij: keydown'da trigger tuşlarını (space/enter/tab) yakala.
-  // keydown'da e.target.value cursor'dan öncesini dogru yansitmiyor bazi durumlarda,
-  // o yuzden input'un guncel icerigini alirken selectionStart'i da dikkate aliyoruz.
-  async function handleSlashCommand(el, triggerEvent) {
-    if (!el || !isEditable(el)) return false;
-
-    let textBeforeCursor = "";
-    let replaceInfo = null;
-
+  // ============================================================
+  // Slash command expansion (exact match on space/enter/tab) — step 1/3
+  // ============================================================
+  function getSlashContext(el) {
     if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
       const pos = el.selectionStart ?? 0;
-      textBeforeCursor = el.value.slice(0, pos);
-      const m = /\/([\w]+)$/.exec(textBeforeCursor);
-      if (!m) return false;
-      replaceInfo = { type: "input", start: pos - m[0].length, end: pos, shortcut: m[1] };
-    } else if (el.isContentEditable) {
-      const sel = window.getSelection();
-      if (!sel?.rangeCount) return false;
-      const range = sel.getRangeAt(0);
-      if (range.startContainer.nodeType !== Node.TEXT_NODE) return false;
-      textBeforeCursor = range.startContainer.textContent.slice(0, range.startOffset);
-      const m = /\/([\w]+)$/.exec(textBeforeCursor);
-      if (!m) return false;
-      replaceInfo = {
-        type: "editable",
-        container: range.startContainer,
-        start: range.startOffset - m[0].length,
-        end: range.startOffset,
-        shortcut: m[1]
-      };
-    } else {
-      return false;
+      const before = el.value.slice(0, pos);
+      const m = TL.slashRegex().exec(before);
+      if (!m) return null;
+      return { type: "input", start: pos - m[0].length, end: pos, shortcut: m[1] };
     }
+    if (el.isContentEditable) {
+      const sel = window.getSelection();
+      if (!sel?.rangeCount) return null;
+      const range = sel.getRangeAt(0);
+      if (range.startContainer.nodeType !== Node.TEXT_NODE) return null;
+      const before = range.startContainer.textContent.slice(0, range.startOffset);
+      const m = TL.slashRegex().exec(before);
+      if (!m) return null;
+      return {
+        type: "editable", container: range.startContainer,
+        start: range.startOffset - m[0].length, end: range.startOffset, shortcut: m[1],
+      };
+    }
+    return null;
+  }
 
-    // SYNC template lookup — preventDefault'un await'ten önce çağrılması için kritik.
-    // Async getTemplates() çağırırsak browser default action (space karakteri yazma)
-    // await resolve olana kadar gerçekleşir → flicker. Cache her zaman son state'i tutar.
+  function deleteSlashToken(el, info) {
+    if (info.type === "input") {
+      const before = el.value.slice(0, info.start);
+      const after = el.value.slice(info.end);
+      setNativeValue(el, before + after);
+      el.setSelectionRange?.(info.start, info.start);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    } else {
+      // Range-based delete keeps the rich editor's DOM consistent. (Plan step 3)
+      const range = document.createRange();
+      range.setStart(info.container, info.start);
+      range.setEnd(info.container, info.end);
+      range.deleteContents();
+      const sel = window.getSelection();
+      const collapsed = document.createRange();
+      collapsed.setStart(info.container, info.start);
+      collapsed.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(collapsed);
+    }
+  }
+
+  async function handleSlashCommand(el, triggerEvent) {
+    if (!el || !isEditable(el)) return false;
+    const info = getSlashContext(el);
+    if (!info) return false;
+
     const templates = getCachedTemplatesSync();
     const template = templates.find(
-      (tpl) => tpl.shortcut && tpl.shortcut.toLowerCase() === replaceInfo.shortcut.toLowerCase()
+      (tpl) => tpl.shortcut && tpl.shortcut.toLowerCase() === info.shortcut.toLowerCase()
     );
     if (!template) return false;
 
-    // preventDefault HEMEN — await'ten önce
     triggerEvent.preventDefault();
     triggerEvent.stopPropagation();
-
-    // /kisayol'u sil
-    if (replaceInfo.type === "input") {
-      const before = el.value.slice(0, replaceInfo.start);
-      const after = el.value.slice(replaceInfo.end);
-      setNativeValue(el, before + after);
-      el.setSelectionRange?.(replaceInfo.start, replaceInfo.start);
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-    } else {
-      const c = replaceInfo.container;
-      c.textContent = c.textContent.slice(0, replaceInfo.start) + c.textContent.slice(replaceInfo.end);
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.setStart(c, replaceInfo.start);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
-
+    deleteSlashToken(el, info);
+    closeAutocomplete();
     handlePaste(template);
     return true;
   }
 
-  // Tek listener — capture phase her event'i en üstte yakalar.
-  // Eskiden document + window'da iki ayrı capture-phase listener kayıtlıydı;
-  // async handler içinde stopPropagation gecikiyordu ve aynı event iki kez
-  // işlenebiliyordu. slashBusy guard reentrancy'i de engelliyor.
   let slashBusy = false;
   const slashHandler = async (e) => {
     if (e.isComposing) return;
+
+    // Autocomplete keyboard control takes priority when open.
+    if (acOpen && acHandleKey(e)) return;
+
     if (e.key !== " " && e.key !== "Enter" && e.key !== "Tab") return;
     if (slashBusy) return;
     if (!isEditable(e.target)) return;
 
     slashBusy = true;
     try {
+      await ensureCache();
       await handleSlashCommand(e.target, e);
     } catch (err) {
       console.error("[TypeLess] Slash handler error:", err);
@@ -435,17 +503,111 @@
       slashBusy = false;
     }
   };
-
   document.addEventListener("keydown", slashHandler, { capture: true, passive: false });
 
-  // Debug helper — Edge'de çalışmıyorsa konsolda self.TLDebug() çağırarak test edilebilir
+  // ============================================================
+  // Slash autocomplete dropdown (plan step 17) — caret-anchored, fuzzy
+  // ============================================================
+  let acHost = null, acShadow = null, acList = null;
+  let acItems = [], acIndex = 0, acOpen = false, acTarget = null, acInfo = null;
+  let acRaf = 0;
+
+  function closeAutocomplete() {
+    if (acHost) { acHost.remove(); acHost = null; acShadow = null; acList = null; }
+    acOpen = false; acItems = []; acIndex = 0; acTarget = null; acInfo = null;
+  }
+
+  function caretRect(el) {
+    try {
+      if (el.isContentEditable) {
+        const sel = window.getSelection();
+        if (sel?.rangeCount) {
+          const r = sel.getRangeAt(0).getClientRects()[0];
+          if (r) return { left: r.left, bottom: r.bottom };
+        }
+      }
+    } catch (_) {}
+    const r = el.getBoundingClientRect();
+    return { left: r.left + 6, bottom: r.top + Math.min(r.height, 28) };
+  }
+
+  function renderAutocomplete(matches, el, info) {
+    if (!acHost) {
+      const h = makeShadowHost("position:fixed;top:0;left:0;z-index:2147483647;");
+      acHost = h.host; acShadow = h.shadow;
+      acList = document.createElement("div");
+      acList.className = "tl-ac";
+      acShadow.appendChild(acList);
+      document.body.appendChild(acHost);
+    }
+    acList.replaceChildren();
+    acItems = matches;
+    acIndex = 0;
+    matches.forEach((tpl, i) => {
+      const item = document.createElement("div");
+      item.className = "tl-ac-item" + (i === 0 ? " active" : "");
+      const nm = document.createElement("span");
+      nm.className = "nm"; nm.textContent = tpl.name || tpl.shortcut || "";
+      const sc = document.createElement("span");
+      sc.className = "sc"; sc.textContent = tpl.shortcut ? "/" + tpl.shortcut : "";
+      item.append(nm, sc);
+      item.addEventListener("mousedown", (e) => { e.preventDefault(); acAccept(i); });
+      acList.appendChild(item);
+    });
+    const rect = caretRect(el);
+    acList.style.left = Math.round(rect.left) + "px";
+    acList.style.top = Math.round(rect.bottom + 4) + "px";
+    acOpen = true; acTarget = el; acInfo = info;
+  }
+
+  function acHighlight() {
+    const nodes = acList?.querySelectorAll(".tl-ac-item") || [];
+    nodes.forEach((n, i) => n.classList.toggle("active", i === acIndex));
+  }
+
+  function acHandleKey(e) {
+    if (!acItems.length) return false;
+    if (e.key === "ArrowDown") { acIndex = (acIndex + 1) % acItems.length; acHighlight(); e.preventDefault(); return true; }
+    if (e.key === "ArrowUp") { acIndex = (acIndex - 1 + acItems.length) % acItems.length; acHighlight(); e.preventDefault(); return true; }
+    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); e.stopPropagation(); acAccept(acIndex); return true; }
+    if (e.key === "Escape") { closeAutocomplete(); e.preventDefault(); return true; }
+    return false; // space/other keys fall through to slash expansion
+  }
+
+  function acAccept(i) {
+    const tpl = acItems[i];
+    const el = acTarget, info = acInfo;
+    closeAutocomplete();
+    if (!tpl || !el || !info) return;
+    deleteSlashToken(el, getSlashContext(el) || info);
+    handlePaste(tpl);
+  }
+
+  // input event drives the live dropdown (rAF-debounced).
+  document.addEventListener("input", (e) => {
+    const el = e.target;
+    if (!isEditable(el)) { closeAutocomplete(); return; }
+    if (acRaf) cancelAnimationFrame(acRaf);
+    acRaf = requestAnimationFrame(() => {
+      const info = getSlashContext(el);
+      if (!info || info.shortcut.length < 1) { closeAutocomplete(); return; }
+      ensureCache().then((templates) => {
+        const matches = TL.fuzzySearch(info.shortcut, templates, 8);
+        if (!matches.length) { closeAutocomplete(); return; }
+        renderAutocomplete(matches, el, info);
+      });
+    });
+  }, true);
+
+  document.addEventListener("focusout", () => closeAutocomplete(), true);
+  document.addEventListener("mousedown", (e) => {
+    if (acHost && e.target !== acHost) closeAutocomplete();
+  }, true);
+
+  // Debug helper (isolated world; pages cannot reach it).
   self.TLDebug = async () => {
     const templates = await TL.getTemplates();
-    console.log("[TypeLess] Templates:", templates);
-    console.log("[TypeLess] Cache:", templateCache);
-    console.log("[TypeLess] Last focused:", lastFocusedElement);
-    console.log("[TypeLess] Active element:", document.activeElement);
+    console.log("[TypeLess] Templates:", templates, "Cache:", templateCache);
     return { templates, cache: templateCache, lastFocused: lastFocusedElement };
   };
-
 })();

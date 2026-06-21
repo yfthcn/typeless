@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-20
+
+A large feature + maturity release. Everything stays **local — no server, no
+network calls** — and the extension keeps shipping **zero runtime dependencies**.
+
+### Fixed (P0 — independently shippable bugfixes)
+- **Hyphenated / non-default shortcuts now expand via slash.** The slash matcher
+  ignored `-` while the editor accepted it, so a `client-reply` shortcut could
+  never be triggered by `/client-reply`. All three call sites (slash matcher,
+  options live-strip, import validation) now derive from a single
+  `TL.SHORTCUT_CHARS` constant.
+- **No more double paste after content-script re-injection.** A per-frame
+  `__TL_CONTENT_LOADED__` guard stops the `executeScript` fallback from
+  registering a second set of listeners.
+- **Rich-editor inserts preserve undo and caret.** ContentEditable paste now
+  uses `insertText` (plain text, single-step undo) with a Selection-API
+  fallback, and slash-token deletion uses a `Range` so CKEditor/Quill/ProseMirror
+  models stay consistent.
+
+### Added — features
+- **Slash autocomplete** — typing `/` shows a caret-anchored, fuzzy-matched,
+  dark-aware dropdown of templates (↑/↓ to move, Enter/Tab to accept, Esc to close).
+- **Dynamic variables** (zero-permission, computed locally): `{{date}}`,
+  `{{time}}`, `{{datetime}}`, date offsets like `{{date+3d}}` / `{{date-2w}}`,
+  and `{{cursor}}` to position the caret after paste.
+- **Smart placeholder fields** via pipe syntax
+  `{{name|Label|type|default|opt1,opt2|remember}}` — text / multiline / dropdown /
+  date inputs, defaults, and opt-in last-value recall (never for secret-looking
+  field names like password/otp/cvv/token).
+- **Tags + search** across name/shortcut/body/tags, in both the options page and
+  the popup.
+- **Dark mode** everywhere (options, popup, and the in-page modal/toast/
+  autocomplete) via `prefers-color-scheme`.
+- **Automatic local backups** — a 5-snapshot ring buffer written before
+  destructive operations, with one-click restore from the options page.
+- **Competitor import** — Text Blaze and Magical exports are auto-detected and
+  converted to TypeLess templates (a pure client-side migration funnel).
+- **Drag-and-drop reordering**, **copy-all-as-JSON to clipboard**, an
+  **insert-variable helper** menu, and a **conflict resolver** on import
+  (keep-both / overwrite / skip) with a rejected/truncated summary.
+
+### Added — engineering
+- **Schema v2** with stable, deterministic per-template `id`s and an explicit
+  `order`, migrated forward idempotently (authoritative single write on
+  install/update; migrate-on-read elsewhere).
+- **Hardening caps**: max 500 templates, 20 000-char bodies, and a 2 MB import
+  size guard checked before parsing.
+- **Zero-dependency unit tests** (`node:test`) and **`// @ts-check`** across all
+  five JS files (via `jsconfig.json` + ambient types).
+- **CI** now runs unit tests, `tsc --noEmit`, and `web-ext lint` alongside the
+  existing JSON/locale-parity checks.
+
+### Cut / deferred (decided by review)
+- **Unlimited custom keyboard shortcuts** — *cut*: MV3 commands are hard-capped
+  and not runtime-registerable; the slash autocomplete covers the need.
+- **`{{clipboard}}` variable** and **`storage.sync`** — *deferred*: both would
+  introduce a permission or a network path that contradicts the "no network,
+  nothing leaves your device" guarantee. Local backups + import/export cover the
+  cross-device need.
+- **Hierarchical folders**, a **visual field-builder UI**, and a **per-edit undo
+  timeline** — *deferred to a later release*; flat tags, inline pipe syntax, and
+  snapshot restore deliver most of the value now.
+
 ## [1.1.0] - 2026-05-09
 
 ### Added

@@ -1,0 +1,21 @@
+{
+  "name": "typeless",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Type less. Paste more. — cross-browser template paster. Dev-tooling manifest only; the extension itself ships zero runtime dependencies.",
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://github.com/yfthcn/typeless",
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc -p jsconfig.json",
+    "lint:ext": "web-ext lint --source-dir dist/firefox-unpacked --warnings-as-errors=false",
+    "check": "npm run typecheck && npm test",
+    "build": "python3 build.py"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.0",
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.3",
+    "web-ext": "^8.3.0"
+  }
+}

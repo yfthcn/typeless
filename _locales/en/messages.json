@@ -98,7 +98,10 @@
   "selectedCount": {
     "message": "$COUNT$ selected",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "exportSingleTooltip": {
@@ -116,7 +119,10 @@
   "importPreview": {
     "message": "$COUNT$ template(s) found in file",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "importCancel": {
@@ -125,7 +131,10 @@
   "importSuccess": {
     "message": "$COUNT$ template(s) imported successfully ✓",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "statusSaved": {
@@ -155,25 +164,36 @@
   "indexLabel": {
     "message": "Template #$INDEX$",
     "placeholders": {
-      "index": { "content": "$1", "example": "1" }
+      "index": {
+        "content": "$1",
+        "example": "1"
+      }
     }
   },
   "shortcutLabel": {
     "message": " — Keyboard shortcut: Ctrl+Shift+$NUM$",
     "placeholders": {
-      "num": { "content": "$1", "example": "1" }
+      "num": {
+        "content": "$1",
+        "example": "1"
+      }
     }
   },
   "importConfirm": {
     "message": "$COUNT$ templates will be imported. Overwrite existing ones?\n\nOK: Overwrite\nCancel: Append to existing",
     "placeholders": {
-      "count": { "content": "$1", "example": "3" }
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
     }
   },
   "importError": {
     "message": "Import error: $MSG$",
     "placeholders": {
-      "msg": { "content": "$1" }
+      "msg": {
+        "content": "$1"
+      }
     }
   },
   "importInvalid": {
@@ -198,10 +218,133 @@
     "message": "Hi {{customer_name}},\n\nYour request has been resolved. Please open a new ticket if you have any further questions.\n\nHave a nice day."
   },
   "statusError": {
-  "message": "Save failed"
-},
+    "message": "Save failed"
+  },
   "popupSystemPage": {
     "message": "TypeLess can't run on this page (browser system page).\n\nTry it on a normal web page (e.g. google.com).",
     "description": "Shown in popup when user clicks paste on a chrome:// or about: page"
+  },
+  "backupEmpty": {
+    "message": "No backups yet."
+  },
+  "backupRestore": {
+    "message": "Restore"
+  },
+  "backupRestored": {
+    "message": "Backup restored"
+  },
+  "backupsTitle": {
+    "message": "Local backups"
+  },
+  "btnBackups": {
+    "message": "⟲ Backups"
+  },
+  "btnExportClip": {
+    "message": "Copy JSON"
+  },
+  "clipCopied": {
+    "message": "Copied to clipboard"
+  },
+  "confirmRestore": {
+    "message": "Restore this backup? Your current templates are snapshotted first."
+  },
+  "conflictKeepboth": {
+    "message": "Keep both"
+  },
+  "conflictOverwrite": {
+    "message": "Overwrite existing"
+  },
+  "conflictSkip": {
+    "message": "Skip duplicates"
+  },
+  "dragHint": {
+    "message": "Drag to reorder"
+  },
+  "labelTags": {
+    "message": "Tags"
+  },
+  "searchNoResults": {
+    "message": "No templates match your search."
+  },
+  "searchPlaceholder": {
+    "message": "Search templates…"
+  },
+  "tagsPlaceholder": {
+    "message": "comma, separated, tags"
+  },
+  "varInsert": {
+    "message": "Insert variable ▾"
+  },
+  "varNeedField": {
+    "message": "Click inside a template body first."
+  },
+  "varCursor": {
+    "message": "Cursor position after paste"
+  },
+  "varDate": {
+    "message": "Today's date"
+  },
+  "varDateOffset": {
+    "message": "Date offset by N days/weeks/months"
+  },
+  "varTime": {
+    "message": "Current time"
+  },
+  "varDatetime": {
+    "message": "Date and time"
+  },
+  "varField": {
+    "message": "A fill-in field"
+  },
+  "backupCount": {
+    "message": "$COUNT$ templates",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "capReached": {
+    "message": "Template limit reached ($MAX$).",
+    "placeholders": {
+      "max": {
+        "content": "$1"
+      }
+    }
+  },
+  "conflictText": {
+    "message": "$COUNT$ shortcut(s) already exist. Choose how to handle duplicates:",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "importSourceDetected": {
+    "message": "$SOURCE$ format detected — converted automatically.",
+    "placeholders": {
+      "source": {
+        "content": "$1"
+      }
+    }
+  },
+  "importSummary": {
+    "message": "($REJECTED$ skipped, $TRUNCATED$ truncated)",
+    "placeholders": {
+      "rejected": {
+        "content": "$1"
+      },
+      "truncated": {
+        "content": "$2"
+      }
+    }
+  },
+  "importTooLarge": {
+    "message": "File too large (max $MAX$ MB).",
+    "placeholders": {
+      "max": {
+        "content": "$1"
+      }
+    }
   }
 }

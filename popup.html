@@ -92,6 +92,38 @@
       cursor: pointer;
     }
     .footer a:hover { text-decoration: underline; }
+    .search-box {
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      border: 1px solid var(--tl-border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      background: #fff;
+      color: var(--tl-text);
+    }
+    .search-box:focus {
+      outline: none;
+      border-color: var(--tl-primary);
+      box-shadow: 0 0 0 3px rgba(79,70,229,.15);
+    }
+    #popup-error {
+      background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b;
+      padding: 10px 12px; border-radius: 6px; font-size: 12px;
+      margin-top: 10px; line-height: 1.4;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --tl-bg: #111827; --tl-border: #374151; --tl-text: #f3f4f6; --tl-muted: #9ca3af;
+      }
+      body { background: #1f2937; }
+      .search-box { background: #111827; }
+      .template-item:hover { background: #312e81; }
+      .template-shortcut { background: #1f2937; }
+      .footer { border-top-color: #374151; }
+      #popup-error { background: #3f1d1d; border-color: #7f1d1d; color: #fca5a5; }
+    }
     .credits {
       margin-top: 8px;
       padding-top: 8px;
@@ -118,6 +150,7 @@
     <h3 id="heading"></h3>
     <span class="tagline" id="tagline"></span>
   </div>
+  <input type="search" id="search" class="search-box" autocomplete="off" />
   <div id="list" class="template-list" role="list"></div>
   <div class="footer">
     <a id="options-link"></a>
