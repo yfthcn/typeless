@@ -173,3 +173,118 @@ test("isSecretName flags credential-like field names", () => {
   }
   assert.equal(TL.isSecretName("customer_name"), false);
 });
+
+// ============================================================
+// Rich-text sanitizer (the trust boundary) — XSS corpus
+// ============================================================
+test("sanitizeHtml keeps the formatting allowlist", () => {
+  assert.equal(TL.sanitizeHtml("<b>a</b><i>b</i><u>c</u><s>d</s>"), "<b>a</b><i>b</i><u>c</u><s>d</s>");
+  assert.equal(TL.sanitizeHtml("<p>x</p><ul><li>a</li></ul>"), "<p>x</p><ul><li>a</li></ul>");
+  assert.equal(TL.sanitizeHtml("line<br>break"), "line<br>break");
+});
+
+test("sanitizeHtml unwraps non-allowlisted formatting elements", () => {
+  assert.equal(TL.sanitizeHtml("<div>x<span>y</span><font>z</font></div>"), "xyz");
+  assert.equal(TL.sanitizeHtml("<h1>Title</h1>"), "Title");
+});
+
+test("sanitizeHtml removes dangerous elements with their subtree", () => {
+  assert.equal(TL.sanitizeHtml("a<script>alert(1)</script>b"), "ab");
+  assert.equal(TL.sanitizeHtml("a<style>* {}</style>b"), "ab");
+  assert.equal(TL.sanitizeHtml("a<iframe src=x></iframe>b"), "ab");
+  assert.equal(TL.sanitizeHtml("<object data=x></object>ok"), "ok");
+});
+
+test("sanitizeHtml drops all attributes including event handlers", () => {
+  assert.equal(TL.sanitizeHtml('<b onclick="x" style="color:red" class="y" id="z">t</b>'), "<b>t</b>");
+  assert.equal(TL.sanitizeHtml('<img src=x onerror=alert(1)>hi'), "hi");
+});
+
+test("sanitizeHtml neutralizes dangerous href schemes, keeps link text", () => {
+  assert.equal(TL.sanitizeHtml('<a href="javascript:alert(1)">x</a>'), "<a>x</a>");
+  assert.equal(TL.sanitizeHtml('<a href="data:text/html,<script>">x</a>'), "<a>x</a>");
+  assert.equal(TL.sanitizeHtml('<a href="vbscript:msgbox">x</a>'), "<a>x</a>");
+  assert.equal(TL.sanitizeHtml('<a href="//evil.com">x</a>'), "<a>x</a>"); // scheme-relative
+  assert.equal(TL.sanitizeHtml('<a href="java\tscript:x">y</a>'), "<a>y</a>"); // tab-split
+});
+
+test("sanitizeHtml keeps safe hrefs and forces rel", () => {
+  const s = TL.sanitizeHtml('<a href="https://example.com">x</a>');
+  assert.ok(s.includes('href="https://example.com"'));
+  assert.ok(s.includes('rel="noopener noreferrer nofollow"'));
+  assert.ok(TL.sanitizeHtml('<a href="mailto:a@b.com">m</a>').includes('href="mailto:a@b.com"'));
+});
+
+test("fillTemplate escape:true blocks markup injection at the HTML sink", () => {
+  const out = TL.fillTemplate("Hi {{n}}", { n: '<img src=x onerror=alert(1)>' }, { escape: true });
+  assert.ok(!out.includes("<img"));
+  assert.equal(out, "Hi &lt;img src=x onerror=alert(1)&gt;");
+  // and the full pipeline (fill->sanitize) yields no executable markup —
+  // the payload survives only as inert, escaped text (no real <img> tag).
+  const sanitized = TL.sanitizeHtml(out);
+  assert.ok(!sanitized.includes("<img"));
+});
+
+test("htmlToPlainText degrades formatting readably and keeps the cursor sentinel", () => {
+  assert.equal(TL.htmlToPlainText("<p>Hi</p><ul><li>a</li><li>b</li></ul>"), "Hi\n- a\n- b");
+  assert.equal(TL.htmlToPlainText('<a href="https://x.com">site</a>'), "site (https://x.com)");
+  assert.equal(TL.htmlToPlainText("x<br>y"), "x\ny");
+  const withCursor = "a" + TL.CURSOR_TOKEN + "b";
+  assert.ok(TL.htmlToPlainText("<b>" + withCursor + "</b>").includes(TL.CURSOR_TOKEN));
+});
+
+// ============================================================
+// Field-builder serializer (plan: body-rewrite)
+// ============================================================
+test("buildFieldToken emits the minimal canonical token", () => {
+  assert.equal(TL.buildFieldToken({ name: "city", type: "text", label: "city", def: "", options: [], remember: false }), "{{city}}");
+  assert.equal(
+    TL.buildFieldToken({ name: "p", label: "Priority", type: "dropdown", def: "", options: ["low", "high"], remember: false }),
+    "{{p|Priority|dropdown||low,high}}"
+  );
+  assert.ok(TL.buildFieldToken({ name: "email", label: "email", type: "text", def: "", options: [], remember: true }).endsWith("|remember}}"));
+  assert.ok(!TL.buildFieldToken({ name: "password", type: "text", remember: true, label: "password", def: "", options: [] }).includes("remember"));
+});
+
+test("buildFieldToken strips pipe/brace/comma metacharacters from values", () => {
+  const tok = TL.buildFieldToken({ name: "x", label: "a|b}c{", type: "text", def: "p,q", options: [], remember: false });
+  // The label/default metachars are gone; only the canonical pipe separators remain.
+  assert.ok(tok.includes("abc"), tok);
+  assert.ok(!tok.includes("a|b"), tok);
+  assert.ok(!tok.includes("}c{"), tok);
+  assert.ok(tok.includes("pq") && !tok.includes("p,q"), tok);
+  // re-parses cleanly (no broken field)
+  assert.equal(TL.parseFields(tok).length, 1);
+});
+
+test("parseFields(buildFieldToken(f)) is a stable round-trip for every field shape", () => {
+  const bodies = [
+    "{{name}}",
+    "{{name|Customer}}",
+    "{{when|Date|date}}",
+    "{{note|Note|multiline|hi}}",
+    "{{p|Pri|dropdown|low|low,med,high}}",
+    "{{email|Email|text||x|remember}}",
+  ];
+  for (const body of bodies) {
+    const f = TL.parseFields(body)[0];
+    const reparsed = TL.parseFields(TL.buildFieldToken(f))[0];
+    assert.deepEqual(reparsed, f, body);
+  }
+});
+
+// ============================================================
+// format flag threading
+// ============================================================
+test("migrate preserves format:html and omits it for plain templates", () => {
+  const m = TL.migrate({ templates: [{ name: "h", body: "<b>x</b>", format: "html" }, { name: "p", body: "plain" }] });
+  assert.equal(m.templates[0].format, "html");
+  assert.equal("format" in m.templates[1], false);
+});
+
+test("validateTemplates re-sanitizes an imported html body", () => {
+  const v = TL.validateTemplates([{ name: "evil", body: "<b>ok</b><script>alert(1)</script>", format: "html" }]);
+  assert.equal(v.accepted[0].format, "html");
+  assert.equal(v.accepted[0].body, "<b>ok</b>");
+  assert.ok(!v.accepted[0].body.includes("script"));
+});

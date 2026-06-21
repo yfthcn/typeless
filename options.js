@@ -190,19 +190,8 @@
     tagsWrap.appendChild(tagsInput);
     card.appendChild(tagsWrap);
 
-    // Body
-    const bodyWrap = document.createElement("div");
-    const bodyLabel = document.createElement("label");
-    bodyLabel.textContent = TL.t("labelBody");
-    const bodyArea = document.createElement("textarea");
-    bodyArea.dataset.field = "body";
-    bodyArea.dataset.idx = String(i);
-    bodyArea.maxLength = TL.LIMITS.MAX_BODY;
-    bodyArea.value = tpl.body || "";
-    bodyArea.addEventListener("focus", () => { lastFocusedBody = bodyArea; });
-    bodyWrap.appendChild(bodyLabel);
-    bodyWrap.appendChild(bodyArea);
-    card.appendChild(bodyWrap);
+    // Body (plain textarea or rich-text editor) + field-builder panel
+    card.appendChild(buildBodySection(tpl, i));
 
     // Actions
     const actions = document.createElement("div");
@@ -238,6 +227,283 @@
     btn.disabled = disabled;
     btn.textContent = text;
     return btn;
+  }
+
+  // ============================================================
+  // Body section: plain/rich toggle, rich-text editor, field-builder
+  // ============================================================
+  function buildBodySection(tpl, i) {
+    const wrap = document.createElement("div");
+    const isHtml = tpl.format === "html";
+
+    // Head: label + plain/rich toggle + fields toggle
+    const head = document.createElement("div");
+    head.className = "body-head";
+    const bodyLabel = document.createElement("label");
+    bodyLabel.textContent = TL.t("labelBody");
+    head.appendChild(bodyLabel);
+
+    const fieldsBtn = document.createElement("button");
+    fieldsBtn.type = "button";
+    fieldsBtn.className = "fields-toggle";
+    fieldsBtn.textContent = "{ } " + TL.t("fieldsToggle");
+    fieldsBtn.setAttribute("aria-expanded", "false");
+    head.appendChild(fieldsBtn);
+
+    const toggle = document.createElement("div");
+    toggle.className = "fmt-toggle";
+    const plainBtn = document.createElement("button");
+    plainBtn.type = "button";
+    plainBtn.textContent = TL.t("formatPlain");
+    plainBtn.className = isHtml ? "" : "active";
+    const richBtn = document.createElement("button");
+    richBtn.type = "button";
+    richBtn.textContent = TL.t("formatRich");
+    richBtn.className = isHtml ? "active" : "";
+    toggle.append(plainBtn, richBtn);
+    head.appendChild(toggle);
+    wrap.appendChild(head);
+
+    plainBtn.addEventListener("click", () => setFormat(i, "text"));
+    richBtn.addEventListener("click", () => setFormat(i, "html"));
+
+    // Editor surface
+    if (isHtml) {
+      wrap.appendChild(buildRichToolbar(i));
+      const editor = document.createElement("div");
+      editor.className = "rich-editor";
+      editor.contentEditable = "true";
+      editor.setAttribute("role", "textbox");
+      editor.setAttribute("aria-multiline", "true");
+      editor.setAttribute("aria-label", TL.t("labelBody"));
+      editor.dataset.idx = String(i);
+      editor.dataset.richEditor = "1";
+      // Make Enter produce <p> (allowed) rather than a bare <div> (which the
+      // sanitizer unwraps, losing the line break).
+      try { document.execCommand("defaultParagraphSeparator", false, "p"); } catch (_) {}
+      // Body is stored sanitized; route through the sanitizer again on render.
+      editor.innerHTML = TL.sanitizeHtml(tpl.body || "");
+      editor.addEventListener("focus", () => { lastFocusedBody = editor; });
+      editor.addEventListener("input", () => {
+        templates[i].body = TL.sanitizeHtml(editor.innerHTML).slice(0, TL.LIMITS.MAX_BODY);
+        count.textContent = templates[i].body.length + " / " + TL.LIMITS.MAX_BODY;
+        save();
+      });
+      // Paste into the editor: sanitize clipboard HTML before it lands.
+      editor.addEventListener("paste", (e) => {
+        e.preventDefault();
+        const html = e.clipboardData.getData("text/html");
+        const text = e.clipboardData.getData("text/plain");
+        const safe = html ? TL.sanitizeHtml(html) : TL.escapeHtml(text).replace(/\n/g, "<br>");
+        document.execCommand("insertHTML", false, safe);
+      });
+      wrap.appendChild(editor);
+    } else {
+      const bodyArea = document.createElement("textarea");
+      bodyArea.dataset.field = "body";
+      bodyArea.dataset.idx = String(i);
+      bodyArea.maxLength = TL.LIMITS.MAX_BODY;
+      bodyArea.value = tpl.body || "";
+      bodyArea.addEventListener("focus", () => { lastFocusedBody = bodyArea; });
+      bodyArea.addEventListener("input", () => {
+        count.textContent = bodyArea.value.length + " / " + TL.LIMITS.MAX_BODY;
+      });
+      wrap.appendChild(bodyArea);
+    }
+
+    const count = document.createElement("div");
+    count.className = "char-count";
+    count.textContent = (tpl.body || "").length + " / " + TL.LIMITS.MAX_BODY;
+    wrap.appendChild(count);
+
+    // Field-builder panel (collapsible)
+    const panel = document.createElement("div");
+    panel.className = "fields-panel";
+    panel.dataset.idx = String(i);
+    wrap.appendChild(panel);
+    fieldsBtn.addEventListener("click", () => {
+      const open = panel.classList.toggle("open");
+      fieldsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) renderFieldsPanel(panel, i);
+    });
+
+    return wrap;
+  }
+
+  function buildRichToolbar(i) {
+    const bar = document.createElement("div");
+    bar.className = "rt-toolbar";
+    const cmds = [
+      { cmd: "bold", label: "B", key: "tbBold", style: "font-weight:700" },
+      { cmd: "italic", label: "I", key: "tbItalic", style: "font-style:italic" },
+      { cmd: "underline", label: "U", key: "tbUnderline", style: "text-decoration:underline" },
+      { cmd: "insertUnorderedList", label: "☰", key: "tbList", style: "" },
+      { cmd: "createLink", label: "🔗", key: "tbLink", style: "" },
+    ];
+    for (const c of cmds) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = c.label;
+      if (c.style) btn.style.cssText = c.style;
+      btn.title = TL.t(c.key);
+      btn.setAttribute("aria-label", TL.t(c.key));
+      btn.addEventListener("mousedown", (e) => e.preventDefault()); // keep editor selection
+      btn.addEventListener("click", () => {
+        if (c.cmd === "createLink") {
+          const url = prompt(TL.t("linkPrompt"), "https://");
+          if (!url) return;
+          const safe = TL.sanitizeHtml('<a href="' + TL.escapeHtml(url) + '">x</a>');
+          if (!safe.includes("href")) return; // rejected unsafe scheme
+          document.execCommand("createLink", false, url);
+        } else {
+          document.execCommand(c.cmd, false);
+        }
+        // Persist after the command mutates the focused editor.
+        const editor = bar.parentElement.querySelector('[data-rich-editor]');
+        if (editor) { templates[i].body = TL.sanitizeHtml(editor.innerHTML); save(); }
+      });
+      bar.appendChild(btn);
+    }
+    return bar;
+  }
+
+  // Switch a template between plain and rich; convert content safely.
+  async function setFormat(i, fmt) {
+    if (!templates[i]) return;
+    const cur = templates[i].format === "html" ? "html" : "text";
+    if ((fmt === "html" ? "html" : "text") === cur) return;
+    if (fmt === "text") {
+      if (!confirm(TL.t("confirmToPlain"))) return;
+      await TL.pushBackup();
+      templates[i].body = TL.htmlToPlainText(templates[i].body || "");
+      delete templates[i].format;
+    } else {
+      templates[i].format = "html";
+      // Existing plain text is valid HTML content; escape it so '<' etc. survive.
+      templates[i].body = TL.sanitizeHtml(TL.escapeHtml(templates[i].body || "").replace(/\n/g, "<br>"));
+    }
+    await saveNow();
+    render();
+  }
+
+  // --- Field-builder panel ---
+  function renderFieldsPanel(panel, i) {
+    panel.replaceChildren();
+    const fields = TL.parseFields(templates[i].body || "");
+    if (fields.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "fields-empty";
+      empty.textContent = TL.t("fieldsEmpty");
+      panel.appendChild(empty);
+    }
+    for (const f of fields) panel.appendChild(buildFieldRow(f, i, panel));
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "small";
+    addBtn.textContent = TL.t("fbAdd");
+    addBtn.addEventListener("click", () => {
+      const raw = prompt(TL.t("fbAddPrompt"), "");
+      if (!raw) return;
+      const name = raw.replace(/[^\w]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 50);
+      if (!name) return;
+      appendToBody(i, "{{" + name + "}}");
+      renderFieldsPanel(panel, i);
+    });
+    panel.appendChild(addBtn);
+  }
+
+  function buildFieldRow(field, i, panel) {
+    const row = document.createElement("div");
+    row.className = "field-row";
+
+    const name = document.createElement("span");
+    name.className = "fname";
+    name.textContent = field.name;
+    row.appendChild(name);
+
+    const label = mkInput(field.label === field.name ? "" : field.label, TL.t("fbLabel"));
+    const type = document.createElement("select");
+    for (const [val, key] of [["text", "typeText"], ["multiline", "typeMultiline"], ["dropdown", "typeDropdown"], ["date", "typeDate"]]) {
+      const o = document.createElement("option");
+      o.value = val; o.textContent = TL.t(key);
+      if (field.type === val) o.selected = true;
+      type.appendChild(o);
+    }
+    const def = mkInput(field.def, TL.t("fbDefault"));
+    const opts = mkInput((field.options || []).join(", "), TL.t("fbOptions"));
+    opts.style.display = field.type === "dropdown" ? "" : "none";
+
+    const remLabel = document.createElement("label");
+    remLabel.className = "rem";
+    const rem = document.createElement("input");
+    rem.type = "checkbox";
+    rem.checked = !!field.remember;
+    if (TL.isSecretName(field.name)) { rem.disabled = true; rem.checked = false; rem.title = field.name; }
+    remLabel.append(rem, document.createTextNode(TL.t("fbRemember")));
+
+    row.append(label, type, def, opts, remLabel);
+
+    const warn = document.createElement("div");
+    warn.className = "field-warn";
+    row.appendChild(warn);
+
+    const apply = () => {
+      opts.style.display = type.value === "dropdown" ? "" : "none";
+      const hadMeta = /[|{}]/.test(label.value + def.value + opts.value) || /,/.test(label.value + def.value);
+      const newField = {
+        name: field.name,
+        label: label.value || field.name,
+        type: type.value,
+        def: def.value,
+        options: type.value === "dropdown" ? opts.value.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        remember: rem.checked,
+      };
+      warn.textContent = hadMeta ? TL.t("metacharWarn") : "";
+      rewriteFieldToken(i, field.name, TL.buildFieldToken(newField));
+    };
+    label.addEventListener("input", apply);
+    def.addEventListener("input", apply);
+    opts.addEventListener("input", apply);
+    type.addEventListener("change", apply);
+    rem.addEventListener("change", apply);
+    return row;
+  }
+
+  function mkInput(value, placeholder) {
+    const el = document.createElement("input");
+    el.type = "text";
+    el.value = value || "";
+    el.placeholder = placeholder;
+    return el;
+  }
+
+  // Replace the {{name...}} token in the body with a freshly-built token.
+  function rewriteFieldToken(i, name, newToken) {
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp("\\{\\{\\s*" + esc + "(\\|[^{}]*)?\\}\\}");
+    templates[i].body = (templates[i].body || "").replace(re, newToken);
+    syncBodyControl(i);
+    save();
+  }
+
+  function appendToBody(i, token) {
+    const cur = templates[i].body || "";
+    templates[i].body = cur + (cur && !cur.endsWith("\n") ? " " : "") + token;
+    syncBodyControl(i);
+    saveNow();
+  }
+
+  // Reflect a programmatic body change back into the visible editor/textarea.
+  function syncBodyControl(i) {
+    const card = refs.templates.querySelector('.template[data-idx="' + i + '"]');
+    if (!card) return;
+    const editor = card.querySelector('[data-rich-editor]');
+    if (editor) { editor.innerHTML = TL.sanitizeHtml(templates[i].body || ""); return; }
+    const ta = card.querySelector('textarea[data-field="body"]');
+    if (ta) ta.value = templates[i].body || "";
+    const count = card.querySelector(".char-count");
+    if (count) count.textContent = (templates[i].body || "").length + " / " + TL.LIMITS.MAX_BODY;
   }
 
   // --- Render ---
@@ -451,6 +717,13 @@
     const ta = lastFocusedBody;
     if (!ta) { showStatus(TL.t("varNeedField")); return; }
     const idx = Number(ta.dataset.idx);
+    if (ta.dataset.richEditor) {
+      ta.focus();
+      document.execCommand("insertText", false, token);
+      if (templates[idx]) templates[idx].body = TL.sanitizeHtml(ta.innerHTML);
+      save();
+      return;
+    }
     const start = ta.selectionStart ?? ta.value.length;
     const end = ta.selectionEnd ?? ta.value.length;
     ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);

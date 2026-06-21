@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-06-21
+
+Still 100% local, zero runtime dependencies, no new permissions, AMO
+`data_collection_permissions.required = none` unchanged.
+
+### Added
+- **Rich-text templates.** A template can opt into formatted content
+  (bold/italic/underline, links, bulleted lists) via a per-template plain↔rich
+  toggle with a small toolbar in the options page. Rich templates paste
+  **formatted** into rich editors (Gmail/CKEditor/Quill/ProseMirror/TinyMCE) and
+  **degrade to clean plain text** in `<input>`/`<textarea>`.
+- **Visual field-builder.** A collapsible *Fields* panel per template detects
+  `{{placeholders}}` in the body and lets you set each field's label, type
+  (text/multiline/dropdown/date), default, options and remember-last with form
+  controls — writing the canonical pipe-syntax back into the body (which stays
+  the single source of truth, so the paste path is unchanged).
+
+### Security
+- **`TL.sanitizeHtml` — one audited trust boundary.** Rich content is sanitized
+  with a DOMParser-based allowlist rebuild (tags `b,strong,i,em,u,s,a,br,p,ul,ol,li`;
+  every other element unwrapped or dropped-with-subtree; **all** attributes
+  default-denied except a validated `href` on `<a>`; `javascript:`/`data:`/
+  `vbscript:`/scheme-relative hrefs neutralised; `rel="noopener noreferrer nofollow"`
+  forced). HTML is **re-sanitized on save, on import, and again at paste**.
+- **Escape-on-fill.** Placeholder values in HTML templates are HTML-escaped
+  before substitution and the whole result is sanitized last, so a malicious
+  field value cannot inject markup at the one HTML sink.
+- README "No innerHTML anywhere" reworded to reflect the single audited sanitizer.
+
+### Changed
+- `README.md` features + docs updated; `_locales` gained the rich-text and
+  field-builder UI strings (EN/TR parity preserved). New `node:test` cases cover
+  the sanitizer XSS corpus, escape-on-fill, `htmlToPlainText`, and the
+  `buildFieldToken` round-trip.
+
 ## [2.0.0] - 2026-06-20
 
 A large feature + maturity release. Everything stays **local — no server, no

@@ -26,6 +26,8 @@ A lightweight, cross-browser extension for pasting ready-made templates into Ser
 - 🔎 **Slash autocomplete** — type `/` and pick from a fuzzy-matched list; no need to memorise shortcuts
 - 🧩 **Dynamic variables** — `{{date}}`, `{{date+3d}}`, `{{time}}`, `{{cursor}}` resolved locally at paste time
 - 📝 **Smart placeholders** — `{{name|Label|dropdown|default|a,b,c}}` renders text, dropdown, or date fields, with optional last-value recall
+- 🧰 **Visual field-builder** — configure placeholder fields with form controls; no need to memorise the pipe syntax
+- 🅱️ **Rich-text templates** — bold/italic/links/lists paste formatted into rich editors and degrade to clean plain text in `<input>`/`<textarea>`
 - 🏷️ **Tags & search** — organise and find templates fast, in the options page and the popup
 - 🌙 **Dark mode** — follows your OS theme everywhere, including the in-page form
 - 💾 **Automatic local backups** — a rolling 5-snapshot safety net with one-click restore
@@ -36,7 +38,7 @@ A lightweight, cross-browser extension for pasting ready-made templates into Ser
 - 📤 **Import / Export** — share templates as JSON (single, selected, batch, or copy to clipboard)
 - 🎨 **Universal editor support** — `<textarea>`, `<input>`, and rich editors (TinyMCE, CKEditor, Quill, ProseMirror)
 - ⌨️ **IME-safe** — won't interfere with Turkish, Japanese, Chinese, or Korean input methods
-- 🔒 **No innerHTML anywhere** — all DOM built via native API for maximum security
+- 🔒 **One audited sanitizer** — the only place HTML is ever inserted runs through a single allowlist sanitizer (DOMParser + a tiny tag/attribute allowlist, `javascript:`/`data:` hrefs neutralised, all event handlers stripped); the rest of the UI is built with `createElement` + `textContent`
 
 ## Installation
 

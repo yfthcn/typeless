@@ -370,22 +370,78 @@
 
     if (!target) { showToast(t("needFocus")); return; }
 
+    const isHtml = template.format === "html";
     const withVars = TL.applyDynamicVars(template.body);
     const fields = TL.parseFields(withVars);
 
-    if (fields.length === 0) {
-      target.focus();
-      pasteIntoElement(target, withVars);
-      return;
+    let filled = withVars;
+    let formShown = false;
+    if (fields.length > 0) {
+      const lastValues = await getLastValues(template.id);
+      const result = await showPlaceholderForm(fields, template.name, lastValues);
+      if (!result) return;
+      // For HTML, every user-supplied value is HTML-escaped BEFORE substitution.
+      filled = TL.fillTemplate(withVars, result.values, { escape: isHtml });
+      if (Object.keys(result.remember).length) saveLastValues(template.id, result.remember);
+      formShown = true;
     }
 
-    const lastValues = await getLastValues(template.id);
-    const result = await showPlaceholderForm(fields, template.name, lastValues);
-    if (!result) return;
-    const filled = TL.fillTemplate(withVars, result.values);
-    if (Object.keys(result.remember).length) saveLastValues(template.id, result.remember);
+    const doPaste = isHtml
+      ? () => pasteHtmlIntoElement(target, TL.sanitizeHtml(filled)) // sanitize is ALWAYS the last pass
+      : () => pasteIntoElement(target, filled);
+
     target.focus();
-    setTimeout(() => pasteIntoElement(target, filled), 30);
+    if (formShown) setTimeout(doPaste, 30); // let focus settle after the modal closes
+    else doPaste();
+  }
+
+  // --- Rich (HTML) paste: contentEditable gets sanitized HTML; input/textarea degrade ---
+  function pasteHtmlIntoElement(el, safeHtml) {
+    if (!el) return false;
+    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+      return pasteIntoElement(el, TL.htmlToPlainText(safeHtml));
+    }
+    if (el.isContentEditable) {
+      el.focus();
+      const hasCursor = safeHtml.indexOf(CURSOR) >= 0;
+      let ok = false;
+      try { ok = document.execCommand("insertHTML", false, safeHtml); } catch (_) {}
+      if (!ok) {
+        const sel = window.getSelection();
+        if (sel?.rangeCount) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          const frag = range.createContextualFragment(safeHtml); // already sanitized
+          range.insertNode(frag);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      if (hasCursor) placeCaretAtSentinel(el);
+      return true;
+    }
+    return false;
+  }
+
+  // Locate the {{cursor}} sentinel that we inserted as a text char, place the
+  // caret there and remove it. Falls back silently to end-of-insertion.
+  function placeCaretAtSentinel(el) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const idx = node.nodeValue.indexOf(CURSOR);
+      if (idx < 0) continue;
+      node.nodeValue = node.nodeValue.slice(0, idx) + node.nodeValue.slice(idx + CURSOR.length);
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.setStart(node, idx);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return;
+    }
   }
 
   // --- Remember-last value storage (non-secret fields only) ---

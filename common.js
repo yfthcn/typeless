@@ -28,6 +28,7 @@
  * @property {string} body
  * @property {string[]} [tags]
  * @property {TLField[]} [fields]
+ * @property {"text"|"html"} [format]  Absent === "text" (plain). "html" => body holds sanitized HTML.
  */
 
 (function (/** @type {any} */ global) {
@@ -127,6 +128,158 @@
   };
 
   // ============================================================
+  // Rich-text sanitizer (the ONE sanctioned HTML insertion path).
+  // This is the entire trust boundary for rich templates. Everything
+  // outside this function builds UI with createElement + textContent.
+  // Authoritative path: DOMParser (inert) -> allowlist tree rebuild.
+  // A guarded, DOM-free fallback runs ONLY under node:test so the suite
+  // can assert identical security outcomes; production always has a DOM.
+  // ============================================================
+  TL.ALLOWED_TAGS = Object.freeze(new Set(
+    ["b", "strong", "i", "em", "u", "s", "a", "br", "p", "ul", "ol", "li"]
+  ));
+  // Removed together with their entire subtree (content discarded).
+  TL.KILL_TAGS = Object.freeze(new Set(
+    ["script", "style", "iframe", "object", "embed", "link", "meta", "base",
+     "form", "svg", "math", "template", "noscript", "title", "head", "frame", "frameset"]
+  ));
+  const SAFE_PROTOCOLS = ["http:", "https:", "mailto:", "tel:"];
+
+  /** Decode the handful of entities we care about (for the DOM-free fallback). */
+  function decodeEntities(s) {
+    return String(s)
+      .replace(/&#x([0-9a-f]+);/gi, (_, h) => safeCodePoint(parseInt(h, 16)))
+      .replace(/&#(\d+);/g, (_, d) => safeCodePoint(parseInt(d, 10)))
+      .replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"').replace(/&apos;/gi, "'").replace(/&#39;/g, "'")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&"); // last, so &amp;lt; -> &lt; (literal)
+  }
+  function safeCodePoint(n) {
+    try { return (n > 0 && n <= 0x10ffff) ? String.fromCodePoint(n) : ""; } catch (_) { return ""; }
+  }
+
+  /** Validate an href; returns a safe value or null. Rejects scheme-relative. */
+  function cleanHref(href) {
+    if (!href) return null;
+    // Strip control chars + ALL whitespace so "java\tscript:" === "javascript:".
+    const s = decodeEntities(String(href)).replace(/[\u0000-\u0020\u007F]/g, "");
+    if (!s || s.startsWith("//")) return null; // scheme-relative -> reject
+    if (typeof document !== "undefined") {
+      try {
+        const a = document.createElement("a");
+        a.href = s;
+        return SAFE_PROTOCOLS.includes(a.protocol.toLowerCase()) ? s : null;
+      } catch (_) { /* fall through */ }
+    }
+    return /^(https?:|mailto:|tel:)/i.test(s) ? s : null;
+  }
+
+  function renderOpenTag(tag, href) {
+    if (tag === "br") return "<br>";
+    if (tag === "a") {
+      const safe = cleanHref(href);
+      return safe
+        ? `<a href="${TL.escapeHtml(safe)}" rel="noopener noreferrer nofollow">`
+        : "<a>";
+    }
+    return `<${tag}>`;
+  }
+
+  // --- Authoritative DOM path ---
+  function sanitizeWithDom(dirty) {
+    const doc = new DOMParser().parseFromString(dirty, "text/html");
+    const out = [];
+    walkDom(doc.body, out);
+    return out.join("");
+  }
+  function walkDom(node, out) {
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) { out.push(TL.escapeHtml(child.nodeValue)); continue; }
+      if (child.nodeType !== 1) continue; // comments / others dropped
+      const tag = child.tagName.toLowerCase();
+      if (TL.KILL_TAGS.has(tag)) continue;            // drop subtree
+      if (!TL.ALLOWED_TAGS.has(tag)) { walkDom(child, out); continue; } // unwrap
+      if (tag === "br") { out.push("<br>"); continue; }
+      out.push(renderOpenTag(tag, child.getAttribute && child.getAttribute("href")));
+      walkDom(child, out);
+      out.push(`</${tag}>`);
+    }
+  }
+
+  // --- DOM-free fallback (node:test only) ---
+  function sanitizeFallback(dirty) {
+    const out = [];
+    const stack = [];
+    let kill = 0;
+    const re = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:"[^"]*"|'[^']*'|[^>])*)>|([^<]+)/g;
+    let m;
+    while ((m = re.exec(dirty)) !== null) {
+      if (m[4] != null) { if (!kill) out.push(TL.escapeHtml(decodeEntities(m[4]))); continue; }
+      if (m[2] === undefined) continue; // comment
+      const closing = m[1] === "/";
+      const tag = m[2].toLowerCase();
+      if (TL.KILL_TAGS.has(tag)) { if (!closing) kill++; else if (kill) kill--; continue; }
+      if (kill) continue;
+      if (!TL.ALLOWED_TAGS.has(tag)) continue; // unwrap
+      if (tag === "br") { if (!closing) out.push("<br>"); continue; }
+      if (closing) {
+        const idx = stack.lastIndexOf(tag);
+        if (idx >= 0) { for (let k = stack.length - 1; k >= idx; k--) out.push(`</${stack[k]}>`); stack.length = idx; }
+      } else {
+        let href = null;
+        if (tag === "a") {
+          const hm = /href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(m[3] || "");
+          if (hm) href = hm[2] ?? hm[3] ?? hm[4];
+        }
+        out.push(renderOpenTag(tag, href));
+        stack.push(tag);
+      }
+    }
+    for (let k = stack.length - 1; k >= 0; k--) out.push(`</${stack[k]}>`);
+    return out.join("");
+  }
+
+  /**
+   * Sanitize untrusted HTML down to a tiny formatting allowlist.
+   * @param {string} dirty
+   * @returns {string} safe HTML
+   */
+  TL.sanitizeHtml = function (dirty) {
+    const src = String(dirty ?? "");
+    if (!src) return "";
+    return typeof DOMParser !== "undefined" ? sanitizeWithDom(src) : sanitizeFallback(src);
+  };
+
+  /** Strip every remaining tag (used by htmlToPlainText). */
+  const stripTags = (s) => String(s).replace(/<\/?[a-zA-Z][^>]*>/g, "");
+
+  /**
+   * Convert (sanitized) HTML to readable plain text for input/textarea targets.
+   * Preserves the {{cursor}} sentinel so caret placement still works.
+   * @param {string} html
+   * @returns {string}
+   */
+  TL.htmlToPlainText = function (html) {
+    let s = String(html ?? "");
+    s = s.replace(/<br\s*\/?>/gi, "\n");
+    s = s.replace(/<li[^>]*>/gi, "- ");
+    s = s.replace(/<\/(p|div|li|ul|ol|h[1-6])>/gi, "\n");
+    s = s.replace(
+      /<a\b[^>]*href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>([\s\S]*?)<\/a>/gi,
+      (_m, _q, h1, h2, h3, text) => {
+        const href = (h1 ?? h2 ?? h3 ?? "").trim();
+        const t = stripTags(text).trim();
+        return href && href !== t ? `${t} (${href})` : t;
+      }
+    );
+    s = stripTags(s);
+    s = decodeEntities(s);
+    s = s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+    return s.replace(/^\n+|\s+$/g, "");
+  };
+
+  // ============================================================
   // Shortcut char-class — single source of truth (plan step 1)
   // ASCII A-Z a-z 0-9 _ - : the only real bug was the missing hyphen,
   // and stored data is already ASCII-stripped, so Unicode would force a
@@ -192,6 +345,7 @@
       };
       if (Array.isArray(base.tags)) tpl.tags = TL.normalizeTags(base.tags);
       if (Array.isArray(base.fields)) tpl.fields = TL.validateFields(base.fields);
+      if (base.format === "html") tpl.format = "html"; // storage already sanitized; copy hint
       return tpl;
     });
 
@@ -226,7 +380,9 @@
       .slice(0, TL.LIMITS.MAX_TEMPLATES)
       .map((t, i) => {
         const name = String(t.name ?? "").slice(0, TL.LIMITS.MAX_NAME);
-        const body = String(t.body ?? "").slice(0, TL.LIMITS.MAX_BODY);
+        // HTML templates are re-sanitized on write so storage NEVER holds dirty HTML.
+        const isHtml = t.format === "html";
+        const body = (isHtml ? TL.sanitizeHtml(String(t.body ?? "")) : String(t.body ?? "")).slice(0, TL.LIMITS.MAX_BODY);
         /** @type {TLTemplate} */
         const tpl = {
           id: (typeof t.id === "string" && t.id) ? t.id : TL.makeId({ name, body }),
@@ -237,6 +393,7 @@
         };
         if (Array.isArray(t.tags)) tpl.tags = TL.normalizeTags(t.tags);
         if (Array.isArray(t.fields)) tpl.fields = TL.validateFields(t.fields);
+        if (isHtml) tpl.format = "html";
         return tpl;
       });
     return chrome.storage.local.set({ templates: norm, schemaVersion: TL.CURRENT_SCHEMA });
@@ -302,7 +459,7 @@
    * Validate + normalize imported templates, returning a summary so the UI
    * can report what was accepted / rejected / truncated.
    * @param {unknown} raw
-   * @returns {{accepted:Array<{name:string,shortcut:string,body:string,tags?:string[],fields?:TLField[]}>, rejected:number, truncated:number}}
+   * @returns {{accepted:Array<{name:string,shortcut:string,body:string,tags?:string[],fields?:TLField[],format?:"text"|"html"}>, rejected:number, truncated:number}}
    */
   TL.validateTemplates = function (raw) {
     const items = Array.isArray(raw) ? raw : [raw];
@@ -312,7 +469,9 @@
 
     for (const t of items) {
       if (!t || typeof t !== "object" || typeof t.body !== "string") { rejected++; continue; }
-      let body = t.body;
+      const isHtml = t.format === "html";
+      // Imported HTML is sanitized here — never trust an external file's markup.
+      let body = isHtml ? TL.sanitizeHtml(t.body) : t.body;
       if (body.length > TL.LIMITS.MAX_BODY) { body = body.slice(0, TL.LIMITS.MAX_BODY); truncated++; }
       const tpl = {
         name: String(t.name ?? "Template").slice(0, TL.LIMITS.MAX_NAME),
@@ -321,6 +480,7 @@
       };
       if (Array.isArray(t.tags)) tpl.tags = TL.normalizeTags(t.tags);
       if (Array.isArray(t.fields)) tpl.fields = TL.validateFields(t.fields);
+      if (isHtml) tpl.format = "html";
       accepted.push(tpl);
       if (accepted.length >= TL.LIMITS.MAX_TEMPLATES) break;
     }
@@ -425,16 +585,46 @@
 
   /**
    * Fill {{placeholders}} (supporting pipe syntax) with values.
+   * For HTML templates pass {escape:true} so every user value is HTML-escaped
+   * BEFORE substitution — this is what keeps a malicious value (e.g. an
+   * `<img onerror>`) from injecting markup at the one HTML insertion sink.
    * @param {string} template
    * @param {Record<string,string>} values
+   * @param {{escape?:boolean}} [opts]
    * @returns {string}
    */
-  TL.fillTemplate = function (template, values) {
+  TL.fillTemplate = function (template, values, opts) {
+    const escape = !!(opts && opts.escape);
     return String(template).replace(/\{\{([^{}]+?)\}\}/g, (full, inner) => {
       const name = inner.split("|")[0].trim();
-      if (values && Object.prototype.hasOwnProperty.call(values, name)) return values[name];
+      if (values && Object.prototype.hasOwnProperty.call(values, name)) {
+        return escape ? TL.escapeHtml(values[name]) : values[name];
+      }
       return full;
     });
+  };
+
+  /**
+   * Serialize a field back to its minimal canonical pipe-token — the exact
+   * inverse of parseFields. Strips pipe/brace/comma from label/default/options
+   * (a stray pipe would shift the field's meaning). Used by the field-builder.
+   * @param {TLField} field
+   * @returns {string}
+   */
+  TL.buildFieldToken = function (field) {
+    const f = /** @type {any} */ (field || {});
+    const clean = (v) => String(v ?? "").replace(/[|{}]/g, "").trim();
+    const cleanNoComma = (v) => clean(v).replace(/,/g, "");
+    const name = cleanNoComma(f.name);
+    const label = cleanNoComma(f.label) === name ? "" : cleanNoComma(f.label);
+    const type = ["multiline", "dropdown", "date"].includes(f.type) ? f.type : "";
+    const def = cleanNoComma(f.def);
+    const options = (f.type === "dropdown" && Array.isArray(f.options))
+      ? f.options.map(cleanNoComma).filter(Boolean).join(",") : "";
+    const remember = (f.remember && !TL.isSecretName(name)) ? "remember" : "";
+    const parts = [name, label, type, def, options, remember];
+    while (parts.length > 1 && parts[parts.length - 1] === "") parts.pop();
+    return "{{" + parts.join("|") + "}}";
   };
 
   // --- Secret field detection (remember-last opt-out) ---

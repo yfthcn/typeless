@@ -346,5 +346,74 @@
         "content": "$1"
       }
     }
+  },
+  "formatPlain": {
+    "message": "Plain"
+  },
+  "formatRich": {
+    "message": "Rich text"
+  },
+  "tbBold": {
+    "message": "Bold"
+  },
+  "tbItalic": {
+    "message": "Italic"
+  },
+  "tbUnderline": {
+    "message": "Underline"
+  },
+  "tbLink": {
+    "message": "Insert link"
+  },
+  "tbList": {
+    "message": "Bulleted list"
+  },
+  "linkPrompt": {
+    "message": "Link URL:"
+  },
+  "fieldsToggle": {
+    "message": "Fields"
+  },
+  "fieldsEmpty": {
+    "message": "Add {{placeholders}} in the body to configure fields here."
+  },
+  "fbLabel": {
+    "message": "Label"
+  },
+  "fbType": {
+    "message": "Type"
+  },
+  "fbDefault": {
+    "message": "Default"
+  },
+  "fbOptions": {
+    "message": "Options (comma-separated)"
+  },
+  "fbRemember": {
+    "message": "Remember"
+  },
+  "fbAdd": {
+    "message": "+ Add field"
+  },
+  "fbAddPrompt": {
+    "message": "New field name:"
+  },
+  "typeText": {
+    "message": "Text"
+  },
+  "typeMultiline": {
+    "message": "Multiline"
+  },
+  "typeDropdown": {
+    "message": "Dropdown"
+  },
+  "typeDate": {
+    "message": "Date"
+  },
+  "confirmToPlain": {
+    "message": "Convert to plain text? Formatting will be lost."
+  },
+  "metacharWarn": {
+    "message": "Removed | { } , characters from a field value."
   }
 }

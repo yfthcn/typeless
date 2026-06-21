@@ -343,5 +343,74 @@
         "content": "$1"
       }
     }
+  },
+  "formatPlain": {
+    "message": "Düz"
+  },
+  "formatRich": {
+    "message": "Zengin metin"
+  },
+  "tbBold": {
+    "message": "Kalın"
+  },
+  "tbItalic": {
+    "message": "İtalik"
+  },
+  "tbUnderline": {
+    "message": "Altı çizili"
+  },
+  "tbLink": {
+    "message": "Bağlantı ekle"
+  },
+  "tbList": {
+    "message": "Madde listesi"
+  },
+  "linkPrompt": {
+    "message": "Bağlantı adresi:"
+  },
+  "fieldsToggle": {
+    "message": "Alanlar"
+  },
+  "fieldsEmpty": {
+    "message": "Alanları buradan yapılandırmak için gövdeye {{yer_tutucu}} ekle."
+  },
+  "fbLabel": {
+    "message": "Etiket"
+  },
+  "fbType": {
+    "message": "Tür"
+  },
+  "fbDefault": {
+    "message": "Varsayılan"
+  },
+  "fbOptions": {
+    "message": "Seçenekler (virgülle)"
+  },
+  "fbRemember": {
+    "message": "Hatırla"
+  },
+  "fbAdd": {
+    "message": "+ Alan ekle"
+  },
+  "fbAddPrompt": {
+    "message": "Yeni alan adı:"
+  },
+  "typeText": {
+    "message": "Metin"
+  },
+  "typeMultiline": {
+    "message": "Çok satır"
+  },
+  "typeDropdown": {
+    "message": "Açılır liste"
+  },
+  "typeDate": {
+    "message": "Tarih"
+  },
+  "confirmToPlain": {
+    "message": "Düz metne çevrilsin mi? Biçimlendirme kaybolacak."
+  },
+  "metacharWarn": {
+    "message": "Bir alan değerinden | { } , karakterleri kaldırıldı."
   }
 }
