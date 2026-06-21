@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed (independent code-review pass)
+- Sanitizer DOM-free fallback: void kill-tags (`<base>`/`<meta>`/`<link>`/`<frame>`)
+  no longer swallow trailing content.
+- Import "overwrite" conflict mode now preserves/clears the `format` flag (was
+  corrupting rich templates into plain on merge).
+- Rich-editor body writes go through one `storeRichBody` helper that re-sanitizes
+  a length-clamped slice (can't store mid-tag-truncated HTML) and keeps the
+  char-count in sync across the editor, toolbar and insert-variable paths.
+- Field-builder rewrites every occurrence of a repeated placeholder token.
+- `storage.onChanged` uses a write-fingerprint instead of a one-shot suppress
+  flag, so a concurrent write from another context is no longer swallowed;
+  order-sort is NaN-safe.
+
+### Changed
+- content.js shares one constructable `CSSStyleSheet` (`adoptedStyleSheets`)
+  across shadow hosts instead of injecting a `<style>` per host; options + popup
+  search inputs are debounced.
+- Added a static product page under `docs/` (GitHub Pages, EN/TR, comparison
+  table) with a `pages.yml` deploy workflow, a user guide (`docs/USAGE.md`) and
+  copy-paste store-listing copy (`docs/store-listing.md`). `docs/` is excluded
+  from the packaged extension.
+
 ## [2.1.0] - 2026-06-21
 
 Still 100% local, zero runtime dependencies, no new permissions, AMO

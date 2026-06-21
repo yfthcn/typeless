@@ -32,6 +32,8 @@ EXCLUDES = {
     # Dev-only tooling — never shipped in the store packages.
     "test", "types", "package.json", "package-lock.json",
     "jsconfig.json", "tsconfig.json",
+    # Marketing / docs site — not part of the extension.
+    "docs",
 }
 
 # Glob patterns for excluded files (e.g. internal dev/audit notes).

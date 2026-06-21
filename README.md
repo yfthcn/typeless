@@ -14,7 +14,7 @@ A lightweight, cross-browser extension for pasting ready-made templates into Ser
 [![License: GPL v3](https://img.shields.io/badge/License-GPL_v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Browsers](https://img.shields.io/badge/browsers-Chrome%20%7C%20Edge%20%7C%20Firefox-success)](#installation)
 
-[Installation](#installation) · [Usage](#usage) · [Türkçe](#türkçe) · [Privacy](#privacy)
+[Website](https://yfthcn.github.io/typeless/) · [User Guide](docs/USAGE.md) · [Installation](#installation) · [Usage](#usage) · [Türkçe](#türkçe) · [Privacy](#privacy)
 
 </div>
 
