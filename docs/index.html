@@ -108,32 +108,11 @@
 
   <footer>
     <a href="https://github.com/yfthcn/typeless">GitHub</a> ·
+    <a href="privacy.html" data-en="Privacy" data-tr="Gizlilik">Privacy</a> ·
     <a href="https://kaktusdev.net">kaktusdev.net</a> ·
     <span>GPLv3 · © 2026 yfthcn</span>
   </footer>
 
-  <script>
-    (function () {
-      var els = document.querySelectorAll("[data-en]");
-      function setLang(lang) {
-        document.documentElement.lang = lang;
-        els.forEach(function (el) {
-          var v = el.getAttribute("data-" + lang);
-          if (v != null) el.textContent = v;
-        });
-        document.querySelectorAll(".lang-switch button").forEach(function (b) {
-          b.classList.toggle("active", b.getAttribute("data-lang") === lang);
-        });
-        try { localStorage.setItem("tl-lang", lang); } catch (e) {}
-      }
-      document.querySelectorAll(".lang-switch button").forEach(function (b) {
-        b.addEventListener("click", function () { setLang(b.getAttribute("data-lang")); });
-      });
-      var saved = null;
-      try { saved = localStorage.getItem("tl-lang"); } catch (e) {}
-      var lang = saved || ((navigator.language || "en").toLowerCase().indexOf("tr") === 0 ? "tr" : "en");
-      setLang(lang);
-    })();
-  </script>
+  <script src="lang.js"></script>
 </body>
 </html>

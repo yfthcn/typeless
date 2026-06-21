@@ -163,8 +163,8 @@ permission justification. Chrome-specific notes:
 - Chrome has no `data_collection_permissions` field; instead complete the
   **Privacy practices** tab: declare that no user data is collected or
   transmitted, and that permissions are used solely for local pasting (mirror
-  the reviewer note above). Provide the privacy-policy URL (the GitHub Pages
-  privacy section or README "Privacy" anchor).
+  the reviewer note above). Privacy-policy URL:
+  `https://yfthcn.github.io/typeless/privacy.html`.
 
 ---
 

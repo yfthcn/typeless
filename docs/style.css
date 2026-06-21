@@ -121,6 +121,16 @@ section h2 { text-align: center; font-size: 28px; margin: 56px 0 28px; }
 .compare td.n { color: var(--no); }
 .fineprint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 14px; }
 
+/* Privacy / policy page */
+.policy { max-width: 720px; margin: 0 auto; padding: 64px 20px 0; }
+.policy .back { margin-bottom: 24px; }
+.policy h1 { font-size: 32px; margin: 0 0 4px; }
+.policy .updated { color: var(--muted); font-size: 13px; margin: 0 0 28px; }
+.policy h2 { text-align: left; font-size: 20px; margin: 34px 0 8px; }
+.policy ul { padding-left: 20px; }
+.policy li { margin-bottom: 6px; }
+.policy b { color: var(--primary); }
+
 /* Footer */
 footer {
   margin-top: 64px; padding: 28px 20px; text-align: center;
