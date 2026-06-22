@@ -3,9 +3,13 @@
 Drop the product-page and store screenshots here. The page (`docs/index.html`)
 and the store listings reference these filenames.
 
+> **No GIF / screen recording needed** — every asset can be a plain static
+> screenshot. The hero is now `hero.png`. (If you ever want an animated hero
+> later, a `hero.gif` works too, but it's optional.)
+
 | File | What to show | Spec |
 |---|---|---|
-| `hero.gif` | One smooth end-to-end demo (type `/`, pick a template, fill a placeholder, pasted) | < 3 MB, looping, ~1280×720 |
+| `hero.png` | The single best "in action" frame — the `/` autocomplete dropdown over a real editor, or the options page. Can be the same image as `shot-autocomplete.png`, just wider. | ~1280×720 PNG |
 | `shot-autocomplete.png` | The `/` slash autocomplete dropdown | 1280×800 |
 | `shot-placeholder.png` | The placeholder fill-in form | 1280×800 |
 | `shot-options.png` | Options page: template list + drag reorder | 1280×800 |
