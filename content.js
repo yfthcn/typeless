@@ -424,8 +424,7 @@
         if (sel?.rangeCount) {
           const range = sel.getRangeAt(0);
           range.deleteContents();
-          const frag = range.createContextualFragment(safeHtml); // already sanitized
-          range.insertNode(frag);
+          range.insertNode(TL.htmlToFragment(safeHtml)); // already sanitized; DOMParser, not createContextualFragment
           range.collapse(false);
           sel.removeAllRanges();
           sel.addRange(range);

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-06-22
+
+### Fixed
+- **Clean AMO / web-ext validation (0 warnings).** The three sanitized-HTML
+  insertion points (rich-editor render + sync, and the contentEditable paste
+  fallback) no longer use `innerHTML =` / `createContextualFragment`. A new
+  `TL.htmlToFragment()` parses the already-sanitized string with DOMParser
+  (inert) and inserts real DOM nodes via `replaceChildren` / `insertNode` —
+  functionally identical, but uses no linter-flagged DOM-write sink.
+
 ### Fixed (independent code-review pass)
 - Sanitizer DOM-free fallback: void kill-tags (`<base>`/`<meta>`/`<link>`/`<frame>`)
   no longer swallow trailing content.

@@ -303,8 +303,8 @@
       // Make Enter produce <p> (allowed) rather than a bare <div> (which the
       // sanitizer unwraps, losing the line break).
       try { document.execCommand("defaultParagraphSeparator", false, "p"); } catch (_) {}
-      // Body is stored sanitized; route through the sanitizer again on render.
-      editor.innerHTML = TL.sanitizeHtml(tpl.body || "");
+      // Body is stored sanitized; re-sanitize and insert as DOM nodes (no innerHTML).
+      editor.replaceChildren(TL.htmlToFragment(TL.sanitizeHtml(tpl.body || "")));
       editor.addEventListener("focus", () => { lastFocusedBody = editor; });
       editor.addEventListener("input", () => storeRichBody(i, editor));
       // Paste into the editor: sanitize clipboard HTML before it lands.
@@ -519,7 +519,7 @@
     const card = refs.templates.querySelector('.template[data-idx="' + i + '"]');
     if (!card) return;
     const editor = card.querySelector('[data-rich-editor]');
-    if (editor) { editor.innerHTML = TL.sanitizeHtml(templates[i].body || ""); return; }
+    if (editor) { editor.replaceChildren(TL.htmlToFragment(TL.sanitizeHtml(templates[i].body || ""))); return; }
     const ta = card.querySelector('textarea[data-field="body"]');
     if (ta) ta.value = templates[i].body || "";
     const count = card.querySelector(".char-count");
